@@ -1,0 +1,17 @@
+{
+  "name": "জলদস্যু — বাংলা কার্ড গেম",
+  "short_name": "জলদস্যু",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#0B1220",
+  "theme_color": "#D9A441",
+  "icons": [
+    {
+      "src": "./opengraph.jpg",
+      "sizes": "512x512",
+      "type": "image/jpeg"
+    }
+  ]
+}
+
