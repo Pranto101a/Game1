@@ -13,6 +13,7 @@
     <meta name="twitter:title" content="জলদস্যু — বাংলা কার্ড গেম" />
     <meta name="twitter:description" content="জলদস্যু — একটি বাংলা পাইরেট কার্ড গেম।" />
     <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
+    <link rel="manifest" href="./manifest.webmanifest" />
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;500;600;700&family=Noto+Sans+Bengali:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -31,140 +32,56 @@
         }
       })(window.location);
     </script>
-    <script type="module" crossorigin src="./assets/index-Er7WoFSS.js"></script>
-    <link rel="stylesheet" crossorigin href="./assets/index-CVHLiWwd.css">
+    <!-- cache-bust so GitHub Pages + browser won't keep old JS/CSS after you replace files -->
+    <!--
+      Hotfix:
+      - "তলোয়ারবাজ" কার্ডে ল্যাগ কমানো (audio noise buffer cache)
+      - লোকাল মাল্টিপ্লেয়ার (একাধিক মানুষ) হলে তলোয়ারবাজের ফলে কার্ডের নাম প্রকাশ না করা
+    -->
+    <script type="module">
+      const entryUrl = new URL("./assets/index-Er7WoFSS.js?v=8", import.meta.url);
+      const res = await fetch(entryUrl);
+      let code = await res.text();
+
+      // 1) Reduce lag: cache white-noise buffer used by SFX
+      const oldCt =
+        'function ct(e,n,i,r,l=2e3,c=0){const f=e.sampleRate*.5,h=e.createBuffer(1,f,e.sampleRate),m=h.getChannelData(0);for(let g=0;g<f;g++)m[g]=(Math.random()*2-1)*n;const p=e.createBufferSource();p.buffer=h;const y=e.createBiquadFilter();if(y.type="lowpass",y.frequency.value=l,c>0){const g=e.createBiquadFilter();g.type="highpass",g.frequency.value=c,p.connect(g),g.connect(y)}else p.connect(y);y.connect(r),p.start(i)}';
+      const newCt =
+        'let __noiseBuf=null,__noiseSampleRate=0;function ct(e,n,i,r,l=2e3,c=0){const f=e.sampleRate*.5;let h=__noiseBuf;if(!h||__noiseSampleRate!==e.sampleRate){h=e.createBuffer(1,f,e.sampleRate);const p=h.getChannelData(0);for(let y=0;y<f;y++)p[y]=Math.random()*2-1;__noiseBuf=h,__noiseSampleRate=e.sampleRate}const m=e.createBufferSource();m.buffer=h;const g=e.createGain();g.gain.value=n;const p=e.createBiquadFilter();if(p.type="lowpass",p.frequency.value=l,c>0){const y=e.createBiquadFilter();y.type="highpass",y.frequency.value=c,m.connect(g),g.connect(y),y.connect(p)}else m.connect(g),g.connect(p);p.connect(r),m.start(i)}';
+      if (code.includes(oldCt)) code = code.replace(oldCt, newCt);
+
+      // 2) Remove swordsman log when no target (keep resultMessage)
+      const oldNoTarget =
+        'h.length===0&&["guard","ship_worker","swordsman","sailor"].includes(r)?(f=zt({...f,resultMessage:`কোনো বৈধ লক্ষ্য নেই — ${Te[r]} এর কোনো প্রভাব নেই।`},`${i.name} ${Te[r]} খেলেছেন — কোনো লক্ষ্য নেই।`),{...f,playStep:"show_result"})';
+      const newNoTarget =
+        'h.length===0&&["guard","ship_worker","swordsman","sailor"].includes(r)?(r==="swordsman"?{...f,resultMessage:`কোনো বৈধ লক্ষ্য নেই — ${Te[r]} এর কোনো প্রভাব নেই।`,playStep:"show_result"}:(f=zt({...f,resultMessage:`কোনো বৈধ লক্ষ্য নেই — ${Te[r]} এর কোনো প্রভাব নেই।`},`${i.name} ${Te[r]} খেলেছেন — কোনো লক্ষ্য নেই।`),{...f,playStep:"show_result"}))';
+      if (code.includes(oldNoTarget)) code = code.replace(oldNoTarget, newNoTarget);
+
+      // 3) Swordsman compare: do NOT reveal any card (and no log entry)
+      const oldZj =
+        'function Zj(e,n){const i=e.players[e.currentPlayerIndex],r=e.players[n],l=i.hand[0],c=r.hand[0],f=l?Rt[l]:-1,h=c?Rt[c]:-1;let m=e.players,p="";return f>h?(m=ur(m,n),p=`${i.name} (${l?Te[l]:"?"}) বনাম ${r.name} (${c?Te[c]:"?"}) — ${r.name} হেরেছেন!`):h>f?(m=ur(m,e.currentPlayerIndex),p=`${i.name} (${l?Te[l]:"?"}) বনাম ${r.name} (${c?Te[c]:"?"}) — ${i.name} হেরেছেন!`):p=`${i.name} বনাম ${r.name} — টাই! কেউ বাদ পড়েননি।`,{...zt({...e,players:m,resultMessage:p},p),playStep:"show_result"}}';
+      const newZj =
+        'function Zj(e,n){const i=e.players[e.currentPlayerIndex],r=e.players[n],l=i.hand[0],c=r.hand[0],f=l?Rt[l]:-1,h=c?Rt[c]:-1;let m=e.players,p="";return f>h?(m=ur(m,n),p=`${i.name} বনাম ${r.name} — ${r.name} হেরেছেন!`):h>f?(m=ur(m,e.currentPlayerIndex),p=`${i.name} বনাম ${r.name} — ${i.name} হেরেছেন!`):p=`${i.name} বনাম ${r.name} — টাই! কেউ বাদ পড়েননি।`,{...e,players:m,resultMessage:p,playStep:"show_result"}}';
+      if (code.includes(oldZj)) code = code.replace(oldZj, newZj);
+
+      const blobUrl = URL.createObjectURL(new Blob([code], { type: "text/javascript" }));
+      try {
+        await import(blobUrl);
+      } finally {
+        URL.revokeObjectURL(blobUrl);
+      }
+    </script>
+    <link rel="stylesheet" crossorigin href="./assets/index-CVHLiWwd.css?v=8">
   </head>
   <body>
     <div id="root"></div>
     <script>
-      // Auto-hide the "Next" button ("পরবর্তী ▶") and show a 5-second countdown instead.
-      // The server will automatically advance the turn after 5 seconds.
-      (function () {
-        var COUNTDOWN_SECONDS = 5;
-        var active = { button: null, el: null, t: null, remaining: 0 };
-
-        function isOnlineMode() {
-          try {
-            // Online mode sets these when creating/joining a room.
-            return !!sessionStorage.getItem("jd_online_room");
-          } catch {
-            return false;
-          }
-        }
-
-        function normalizeText(s) {
-          return String(s || "")
-            .replace(/\s+/g, " ")
-            .trim();
-        }
-
-        function isNextButton(btn) {
-          if (!btn || btn.tagName !== "BUTTON") return false;
-          var txt = normalizeText(btn.textContent);
-          return txt === "পরবর্তী ▶";
-        }
-
-        function cleanup() {
-          if (active.t) clearInterval(active.t);
-          active.t = null;
-          if (active.el && active.el.parentNode) active.el.parentNode.removeChild(active.el);
-          active.el = null;
-          if (active.button) active.button.style.removeProperty("display");
-          active.button = null;
-          active.remaining = 0;
-        }
-
-        function mount(btn) {
-          cleanup();
-          active.button = btn;
-          btn.style.display = "none";
-
-          var el = document.createElement("div");
-          el.id = "__auto_next_timer";
-          el.className = btn.className || "px-8 py-3 rounded-xl bg-primary text-primary-foreground font-bold";
-          el.style.userSelect = "none";
-          btn.parentNode.insertBefore(el, btn.nextSibling);
-          active.el = el;
-
-          active.remaining = COUNTDOWN_SECONDS;
-          el.textContent = "পরবর্তী চাল " + active.remaining + " সেকেন্ডে…";
-          active.t = setInterval(function () {
-            // If React re-rendered and removed the original button, stop.
-            if (!active.button || !document.contains(active.button)) {
-              cleanup();
-              return;
-            }
-            active.remaining -= 1;
-            if (active.remaining <= 0) {
-              // Server-side timer advances automatically; this is just UI.
-              cleanup();
-              return;
-            }
-            el.textContent = "পরবর্তী চাল " + active.remaining + " সেকেন্ডে…";
-          }, 1000);
-        }
-
-        function tick() {
-          try {
-            // Offline mode: keep the original flow (no timer, user presses Next).
-            if (!isOnlineMode()) {
-              if (active.button) cleanup();
-              return;
-            }
-            var buttons = document.querySelectorAll("button");
-            var found = null;
-            for (var i = 0; i < buttons.length; i++) {
-              if (isNextButton(buttons[i])) {
-                found = buttons[i];
-                break;
-              }
-            }
-            if (!found) {
-              if (active.button) cleanup();
-              return;
-            }
-            if (active.button !== found) mount(found);
-          } catch {
-            // ignore
-          }
-        }
-
-        setInterval(tick, 250);
-      })();
-    </script>
-    <script>
-      // Offline mode fix: "তলোয়ারবাজ" (Swordsman) ফলাফলে কার্ডের নাম সবাইকে দেখানো বন্ধ।
-      // এটি DOM-এ দেখানো টেক্সট থেকে "(কার্ডের নাম)" অংশ মুছে দেয়।
-      (function () {
-        var re = /^(.*)\\s\\([^)]*\\)\\sবনাম\\s(.*)\\s\\([^)]*\\)\\s—\\s(.*)$/;
-        function normalizeText(s) {
-          return String(s || "").replace(/\\s+/g, " ").trim();
-        }
-        function sanitizeNode(el) {
-          if (!el || el.nodeType !== 1) return;
-          if (el.children && el.children.length) return; // only leaf text nodes
-          var txt = normalizeText(el.textContent);
-          if (!txt) return;
-          // Only sanitize lines that look like "A (Card) বনাম B (Card) — ..."
-          if (txt.indexOf("বনাম") === -1 || txt.indexOf("(") === -1 || txt.indexOf(")") === -1 || txt.indexOf("—") === -1) return;
-          var m = txt.match(re);
-          if (!m) return;
-          var clean = m[1] + " বনাম " + m[2] + " — " + m[3];
-          if (clean !== txt) el.textContent = clean;
-        }
-        function tick() {
-          try {
-            var root = document.getElementById("root");
-            if (!root) return;
-            // scan common text nodes (p/div/span/button etc.)
-            var nodes = root.querySelectorAll("p,div,span,button");
-            for (var i = 0; i < nodes.length; i++) sanitizeNode(nodes[i]);
-          } catch {
-            // ignore
-          }
-        }
-        setInterval(tick, 250);
-      })();
+      // Offline support (PWA). First load needs internet; after that it can run without data.
+      if ("serviceWorker" in navigator) {
+        window.addEventListener("load", function () {
+          navigator.serviceWorker.register("./sw.js", { scope: "./" }).catch(function () {});
+        });
+      }
     </script>
   </body>
 </html>
