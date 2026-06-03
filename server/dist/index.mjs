@@ -505,6 +505,7 @@ function aiTakeTurn(state) {
 
 // entry.ts
 var rooms = /* @__PURE__ */ new Map();
+var autoAckTimers = /* @__PURE__ */ new Map();
 function generateRoomId() {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
   let id = "";
@@ -605,6 +606,36 @@ function applyAction(roomId, playerId, actionData) {
   room.gameState = state;
   return state;
 }
+
+function clearAutoAckTimer(roomId) {
+  const t = autoAckTimers.get(roomId);
+  if (t) clearTimeout(t);
+  autoAckTimers.delete(roomId);
+}
+
+function scheduleAutoAcknowledge(io2, roomId) {
+  clearAutoAckTimer(roomId);
+  const room = getRoom(roomId);
+  if (!room?.gameState) return;
+  const s = room.gameState;
+  if (s.phase !== "playing") return;
+  if (s.playStep !== "show_result" && s.playStep !== "peek_result") return;
+  const expectedPlayerId = s.currentPlayerIndex;
+  const expectedStep = s.playStep;
+  const t = setTimeout(() => {
+    const r2 = getRoom(roomId);
+    if (!r2?.gameState) return;
+    const cur = r2.gameState;
+    if (cur.phase !== "playing") return;
+    if (cur.currentPlayerIndex !== expectedPlayerId) return;
+    if (cur.playStep !== expectedStep) return;
+    const nextState = applyAction(roomId, expectedPlayerId, { action: "acknowledge" });
+    if (!nextState) return;
+    io2.to(roomId).emit("game_action_ack", { state: nextState });
+    scheduleAutoAcknowledge(io2, roomId);
+  }, 5e3);
+  autoAckTimers.set(roomId, t);
+}
 var port = Number(process.env.PORT ?? "3000");
 var httpServer = createServer((req, res) => {
   if (req.url?.startsWith("/api/healthz")) {
@@ -674,6 +705,7 @@ io.on("connection", (socket) => {
       return;
     }
     io.to(roomId).emit("game_state", { state });
+    scheduleAutoAcknowledge(io, roomId);
   });
   socket.on("game_action", ({ roomId, playerId, ...actionData }) => {
     const state = applyAction(roomId, playerId, actionData);
@@ -682,6 +714,7 @@ io.on("connection", (socket) => {
       return;
     }
     io.to(roomId).emit("game_action_ack", { state });
+    scheduleAutoAcknowledge(io, roomId);
   });
 });
 httpServer.listen(port, () => {
