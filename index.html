@@ -36,5 +36,87 @@
   </head>
   <body>
     <div id="root"></div>
+    <script>
+      // Auto-hide the "Next" button ("পরবর্তী ▶") and show a 5-second countdown instead.
+      // The server will automatically advance the turn after 5 seconds.
+      (function () {
+        var COUNTDOWN_SECONDS = 5;
+        var active = { button: null, el: null, t: null, remaining: 0 };
+
+        function normalizeText(s) {
+          return String(s || "")
+            .replace(/\s+/g, " ")
+            .trim();
+        }
+
+        function isNextButton(btn) {
+          if (!btn || btn.tagName !== "BUTTON") return false;
+          var txt = normalizeText(btn.textContent);
+          return txt === "পরবর্তী ▶";
+        }
+
+        function cleanup() {
+          if (active.t) clearInterval(active.t);
+          active.t = null;
+          if (active.el && active.el.parentNode) active.el.parentNode.removeChild(active.el);
+          active.el = null;
+          if (active.button) active.button.style.removeProperty("display");
+          active.button = null;
+          active.remaining = 0;
+        }
+
+        function mount(btn) {
+          cleanup();
+          active.button = btn;
+          btn.style.display = "none";
+
+          var el = document.createElement("div");
+          el.id = "__auto_next_timer";
+          el.className = btn.className || "px-8 py-3 rounded-xl bg-primary text-primary-foreground font-bold";
+          el.style.userSelect = "none";
+          btn.parentNode.insertBefore(el, btn.nextSibling);
+          active.el = el;
+
+          active.remaining = COUNTDOWN_SECONDS;
+          el.textContent = "পরবর্তী চাল " + active.remaining + " সেকেন্ডে…";
+          active.t = setInterval(function () {
+            // If React re-rendered and removed the original button, stop.
+            if (!active.button || !document.contains(active.button)) {
+              cleanup();
+              return;
+            }
+            active.remaining -= 1;
+            if (active.remaining <= 0) {
+              // Server-side timer advances automatically; this is just UI.
+              cleanup();
+              return;
+            }
+            el.textContent = "পরবর্তী চাল " + active.remaining + " সেকেন্ডে…";
+          }, 1000);
+        }
+
+        function tick() {
+          try {
+            var buttons = document.querySelectorAll("button");
+            var found = null;
+            for (var i = 0; i < buttons.length; i++) {
+              if (isNextButton(buttons[i])) {
+                found = buttons[i];
+                break;
+              }
+            }
+            if (!found) {
+              if (active.button) cleanup();
+              return;
+            }
+            if (active.button !== found) mount(found);
+          } catch {
+            // ignore
+          }
+        }
+
+        setInterval(tick, 250);
+      })();
+    </script>
   </body>
 </html>
