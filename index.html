@@ -118,5 +118,39 @@
         setInterval(tick, 250);
       })();
     </script>
+    <script>
+      // Offline mode fix: "তলোয়ারবাজ" (Swordsman) ফলাফলে কার্ডের নাম সবাইকে দেখানো বন্ধ।
+      // এটি DOM-এ দেখানো টেক্সট থেকে "(কার্ডের নাম)" অংশ মুছে দেয়।
+      (function () {
+        var re = /^(.*)\\s\\([^)]*\\)\\sবনাম\\s(.*)\\s\\([^)]*\\)\\s—\\s(.*)$/;
+        function normalizeText(s) {
+          return String(s || "").replace(/\\s+/g, " ").trim();
+        }
+        function sanitizeNode(el) {
+          if (!el || el.nodeType !== 1) return;
+          if (el.children && el.children.length) return; // only leaf text nodes
+          var txt = normalizeText(el.textContent);
+          if (!txt) return;
+          // Only sanitize lines that look like "A (Card) বনাম B (Card) — ..."
+          if (txt.indexOf("বনাম") === -1 || txt.indexOf("(") === -1 || txt.indexOf(")") === -1 || txt.indexOf("—") === -1) return;
+          var m = txt.match(re);
+          if (!m) return;
+          var clean = m[1] + " বনাম " + m[2] + " — " + m[3];
+          if (clean !== txt) el.textContent = clean;
+        }
+        function tick() {
+          try {
+            var root = document.getElementById("root");
+            if (!root) return;
+            // scan common text nodes (p/div/span/button etc.)
+            var nodes = root.querySelectorAll("p,div,span,button");
+            for (var i = 0; i < nodes.length; i++) sanitizeNode(nodes[i]);
+          } catch {
+            // ignore
+          }
+        }
+        setInterval(tick, 250);
+      })();
+    </script>
   </body>
 </html>
