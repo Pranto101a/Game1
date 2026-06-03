@@ -272,10 +272,10 @@ function resolveSwordsman(state, targetIdx) {
   let msg = "";
   if (attackerVal > targetVal) {
     players = eliminatePlayer(players, targetIdx);
-    msg = `${attacker.name} (${attackerCard ? CARD_NAMES_BN[attackerCard] : "?"}) \u09AC\u09A8\u09BE\u09AE ${target.name} (${targetCard ? CARD_NAMES_BN[targetCard] : "?"}) \u2014 ${target.name} \u09B9\u09C7\u09B0\u09C7\u099B\u09C7\u09A8!`;
+    msg = `${attacker.name} \u09AC\u09A8\u09BE\u09AE ${target.name} \u2014 ${target.name} \u09B9\u09C7\u09B0\u09C7\u099B\u09C7\u09A8!`;
   } else if (targetVal > attackerVal) {
     players = eliminatePlayer(players, state.currentPlayerIndex);
-    msg = `${attacker.name} (${attackerCard ? CARD_NAMES_BN[attackerCard] : "?"}) \u09AC\u09A8\u09BE\u09AE ${target.name} (${targetCard ? CARD_NAMES_BN[targetCard] : "?"}) \u2014 ${attacker.name} \u09B9\u09C7\u09B0\u09C7\u099B\u09C7\u09A8!`;
+    msg = `${attacker.name} \u09AC\u09A8\u09BE\u09AE ${target.name} \u2014 ${attacker.name} \u09B9\u09C7\u09B0\u09C7\u099B\u09C7\u09A8!`;
   } else {
     msg = `${attacker.name} \u09AC\u09A8\u09BE\u09AE ${target.name} \u2014 \u099F\u09BE\u0987! \u0995\u09C7\u0989 \u09AC\u09BE\u09A6 \u09AA\u09A1\u09BC\u09C7\u09A8\u09A8\u09BF\u0964`;
   }
