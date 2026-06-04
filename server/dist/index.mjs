@@ -1,6 +1,17 @@
 // entry.ts
 import { createServer } from "node:http";
 import { Server as SocketIOServer } from "socket.io";
+import { randomInt as cryptoRandomInt } from "node:crypto";
+
+function randInt(maxExclusive) {
+  if (maxExclusive <= 0) return 0;
+  try {
+    // cryptoRandomInt is unbiased and much stronger than Math.random().
+    return cryptoRandomInt(0, maxExclusive);
+  } catch {
+    return Math.floor(Math.random() * maxExclusive);
+  }
+}
 
 // ../pirate-card-game/lib/game-engine/src/game-logic.ts
 var CARD_COUNTS = {
@@ -42,7 +53,7 @@ var CARD_NAMES_BN = {
 function shuffle(arr) {
   const a = [...arr];
   for (let i = a.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
+    const j = randInt(i + 1);
     [a[i], a[j]] = [a[j], a[i]];
   }
   return a;
@@ -353,7 +364,7 @@ function merchantSelect(state, keepIndex) {
   return { ...s, playStep: "show_result" };
 }
 function aiSelectTarget(state, validTargets) {
-  const targetIdx = validTargets[Math.floor(Math.random() * validTargets.length)];
+  const targetIdx = validTargets[randInt(validTargets.length)];
   const s = { ...state, targetPlayerIndex: targetIdx };
   if (state.cardBeingPlayed === "guard") {
     return aiGuardGuess(s, targetIdx);
@@ -362,7 +373,7 @@ function aiSelectTarget(state, validTargets) {
 }
 function aiGuardGuess(state, targetIdx) {
   const guessable = ["ship_worker", "swordsman", "cannon", "merchant", "sailor", "captain", "spy", "pirate", "petty_thief"];
-  const guess = guessable[Math.floor(Math.random() * guessable.length)];
+  const guess = guessable[randInt(guessable.length)];
   return resolveGuard({ ...state, targetPlayerIndex: targetIdx }, guess);
 }
 function acknowledgeResult(state) {
@@ -509,7 +520,7 @@ var autoAckTimers = /* @__PURE__ */ new Map();
 function generateRoomId() {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
   let id = "";
-  for (let i = 0; i < 5; i++) id += chars[Math.floor(Math.random() * chars.length)];
+  for (let i = 0; i < 5; i++) id += chars[randInt(chars.length)];
   return id;
 }
 function createRoom(socketId, playerName) {
