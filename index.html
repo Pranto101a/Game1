@@ -64,6 +64,13 @@
         'function Zj(e,n){const i=e.players[e.currentPlayerIndex],r=e.players[n],l=i.hand[0],c=r.hand[0],f=l?Rt[l]:-1,h=c?Rt[c]:-1;let m=e.players,p="";return f>h?(m=ur(m,n),p=`${i.name} বনাম ${r.name} — ${r.name} হেরেছেন!`):h>f?(m=ur(m,e.currentPlayerIndex),p=`${i.name} বনাম ${r.name} — ${i.name} হেরেছেন!`):p=`${i.name} বনাম ${r.name} — টাই! কেউ বাদ পড়েননি।`,{...e,players:m,resultMessage:p,playStep:"show_result"}}';
       if (code.includes(oldZj)) code = code.replace(oldZj, newZj);
 
+      // 4) Better randomness: use crypto-based RNG for deck/card shuffle (offline too)
+      const oldShuffle =
+        'function em(e){const n=[...e];for(let i=n.length-1;i>0;i--){const r=Math.floor(Math.random()*(i+1));[n[i],n[r]]=[n[r],n[i]]}return n}';
+      const newShuffle =
+        'function __secureRandInt(e){if(typeof crypto!=="undefined"&&crypto.getRandomValues){const n=new Uint32Array(1);const t=4294967296-4294967296%e;let r;do{crypto.getRandomValues(n);r=n[0]}while(r>=t);return r%e}return Math.floor(Math.random()*e)}function em(e){const n=[...e];for(let i=n.length-1;i>0;i--){const r=__secureRandInt(i+1);[n[i],n[r]]=[n[r],n[i]]}return n}';
+      if (code.includes(oldShuffle)) code = code.replace(oldShuffle, newShuffle);
+
       const blobUrl = URL.createObjectURL(new Blob([code], { type: "text/javascript" }));
       try {
         await import(blobUrl);
