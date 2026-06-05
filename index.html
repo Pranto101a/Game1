@@ -68,9 +68,195 @@
       };
       window.__jdSetCardCounts(window.__jdGetCardCounts());
 
-      const entryUrl = new URL("./assets/index-Er7WoFSS.js?v=10", import.meta.url);
+      const entryUrl = new URL("./assets/index-Er7WoFSS.js?v=11", import.meta.url);
       const res = await fetch(entryUrl);
       let code = await res.text();
+
+      // --- UI controls for Guard/Merchant counts (offline start + online lobby) ---
+      // We inject a tiny DOM-based UI so we don't need to rebuild the bundled app.
+      // Values are stored in localStorage via __jdSetCardCounts and used by both offline+online.
+      (function setupCardCountControls() {
+        const GUARD_OPTIONS = [1, 2, 3, 4, 5, 6];
+        const MERCHANT_OPTIONS = [1, 2];
+
+        function getCounts() {
+          try {
+            const raw = window.__jdGetCardCounts ? window.__jdGetCardCounts() : { guard: 6, merchant: 2 };
+            const guard = GUARD_OPTIONS.includes(raw.guard) ? raw.guard : 6;
+            const merchant = MERCHANT_OPTIONS.includes(raw.merchant) ? raw.merchant : 2;
+            return { guard, merchant };
+          } catch {
+            return { guard: 6, merchant: 2 };
+          }
+        }
+        function setCounts(next) {
+          try {
+            if (window.__jdSetCardCounts) return window.__jdSetCardCounts(next);
+          } catch {}
+          try {
+            localStorage.setItem("jd_card_counts", JSON.stringify(next));
+          } catch {}
+          return next;
+        }
+
+        function makeOptionButtons({ options, selected, onSelect }) {
+          const wrap = document.createElement("div");
+          wrap.className = "flex gap-2 flex-wrap";
+          for (const v of options) {
+            const btn = document.createElement("button");
+            btn.type = "button";
+            const isSel = v === selected;
+            btn.className =
+              "w-10 h-10 rounded-lg font-bold transition-all " +
+              (isSel
+                ? "bg-primary text-primary-foreground"
+                : "bg-secondary text-secondary-foreground hover:bg-secondary/80");
+            btn.textContent = String(v);
+            btn.addEventListener("click", () => onSelect(v));
+            wrap.appendChild(btn);
+          }
+          return wrap;
+        }
+
+        function mountControls({ root, mode }) {
+          // mode: "offline" | "online"
+          const id = mode === "offline" ? "jd-cardcount-controls-offline" : "jd-cardcount-controls-online";
+          if (root.querySelector(`#${id}`)) return;
+
+          const c = getCounts();
+
+          const container = document.createElement("div");
+          container.id = id;
+          container.className = "mb-4";
+
+          const title = document.createElement("p");
+          title.className = "text-xs text-muted-foreground mb-2 font-bold";
+          title.textContent = mode === "offline" ? "কার্ড সেটিংস (অফলাইন)" : "কার্ড সেটিংস (অনলাইন)";
+
+          // Host-only for online lobby
+          let isHost = true;
+          if (mode === "online") {
+            try {
+              isHost = sessionStorage.getItem("jd_online_player_id") === "0";
+            } catch {
+              isHost = false;
+            }
+          }
+
+          const guardLabel = document.createElement("label");
+          guardLabel.className = "block text-sm text-muted-foreground mb-2";
+          guardLabel.textContent = "পাহারাদার";
+
+          const merchantLabel = document.createElement("label");
+          merchantLabel.className = "block text-sm text-muted-foreground mb-2";
+          merchantLabel.textContent = "বণিক";
+
+          const guardWrap = document.createElement("div");
+          guardWrap.className = "mb-4";
+          const merchantWrap = document.createElement("div");
+          merchantWrap.className = "mb-1";
+
+          function render() {
+            const cur = getCounts();
+            guardWrap.innerHTML = "";
+            merchantWrap.innerHTML = "";
+            guardWrap.appendChild(guardLabel);
+            merchantWrap.appendChild(merchantLabel);
+
+            const guardBtns = makeOptionButtons({
+              options: GUARD_OPTIONS,
+              selected: cur.guard,
+              onSelect: (v) => {
+                if (!isHost) return;
+                setCounts({ ...cur, guard: v });
+                render();
+              }
+            });
+            const merchBtns = makeOptionButtons({
+              options: MERCHANT_OPTIONS,
+              selected: cur.merchant,
+              onSelect: (v) => {
+                if (!isHost) return;
+                setCounts({ ...cur, merchant: v });
+                render();
+              }
+            });
+
+            if (!isHost) {
+              guardBtns.style.opacity = "0.5";
+              merchBtns.style.opacity = "0.5";
+              guardBtns.style.pointerEvents = "none";
+              merchBtns.style.pointerEvents = "none";
+            }
+
+            guardWrap.appendChild(guardBtns);
+            merchantWrap.appendChild(merchBtns);
+          }
+
+          render();
+
+          container.appendChild(title);
+          container.appendChild(guardWrap);
+          container.appendChild(merchantWrap);
+
+          if (mode === "online" && !isHost) {
+            const note = document.createElement("p");
+            note.className = "text-xs text-muted-foreground mt-2";
+            note.textContent = "শুধু হোস্ট এই সেটিংস পরিবর্তন করতে পারবেন।";
+            container.appendChild(note);
+          }
+
+          // Insert just before the main action button of that card
+          const actionBtn = Array.from(root.querySelectorAll("button")).find((b) =>
+            b.textContent?.includes("খেলা শুরু করুন")
+          );
+          if (actionBtn && actionBtn.parentElement) {
+            actionBtn.parentElement.insertBefore(container, actionBtn);
+          } else {
+            root.appendChild(container);
+          }
+        }
+
+        function ensureOffline() {
+          const h2 = Array.from(document.querySelectorAll("h2")).find(
+            (el) => el.textContent?.trim() === "নতুন খেলা"
+          );
+          if (!h2) return;
+          const card = h2.closest(".bg-card") || h2.closest("div");
+          if (!card) return;
+          mountControls({ root: card, mode: "offline" });
+        }
+
+        function ensureOnlineLobby() {
+          const h2 = Array.from(document.querySelectorAll("h2")).find((el) => el.textContent?.trim() === "লবি");
+          if (!h2) return;
+          const card = h2.closest(".bg-card") || h2.closest("div");
+          if (!card) return;
+          mountControls({ root: card, mode: "online" });
+        }
+
+        function ensureAll() {
+          try {
+            ensureOffline();
+            ensureOnlineLobby();
+          } catch {}
+        }
+
+        let scheduled = false;
+        function schedule() {
+          if (scheduled) return;
+          scheduled = true;
+          requestAnimationFrame(() => {
+            scheduled = false;
+            ensureAll();
+          });
+        }
+
+        ensureAll();
+        const obs = new MutationObserver(schedule);
+        obs.observe(document.documentElement, { childList: true, subtree: true });
+        window.addEventListener("load", ensureAll);
+      })();
 
       // 1) Reduce lag: cache white-noise buffer used by SFX
       const oldCt =
@@ -113,12 +299,12 @@
       const oldOfflineStart =
         'x.jsx("button",{onClick:b,className:"w-full py-3 rounded-xl bg-primary text-primary-foreground font-bold text-lg hover:bg-accent transition-all hover:scale-[1.02] active:scale-[0.98] shadow-lg",children:"⚓ খেলা শুরু করুন"})';
       const newOfflineStart =
-        'x.jsx("button",{onClick:()=>{try{const cur=window.__jdGetCardCounts?window.__jdGetCardCounts():{guard:6,merchant:2};const g=prompt("পাহারাদার (Guard) কতটি থাকবে? (ডিফল্ট ৬)",String(cur.guard));const m=prompt("বণিক (Merchant) কতটি থাকবে? (ডিফল্ট ২)",String(cur.merchant));const ng=parseInt(g??"",10);const nm=parseInt(m??"",10);const next={guard:Number.isFinite(ng)?ng:cur.guard,merchant:Number.isFinite(nm)?nm:cur.merchant};window.__jdSetCardCounts&&window.__jdSetCardCounts(next)}catch(e){}b()},className:"w-full py-3 rounded-xl bg-primary text-primary-foreground font-bold text-lg hover:bg-accent transition-all hover:scale-[1.02] active:scale-[0.98] shadow-lg",children:"⚓ খেলা শুরু করুন"})';
+        'x.jsx("button",{onClick:b,className:"w-full py-3 rounded-xl bg-primary text-primary-foreground font-bold text-lg hover:bg-accent transition-all hover:scale-[1.02] active:scale-[0.98] shadow-lg",children:"⚓ খেলা শুরু করুন"})';
       if (code.includes(oldOfflineStart)) code = code.replace(oldOfflineStart, newOfflineStart);
 
       const oldStartGameFn = 'function O(){Jt(),R("start_game")}';
       const newStartGameFn =
-        'function O(){Jt();if(c===0){try{const cur=window.__jdGetCardCounts?window.__jdGetCardCounts():{guard:6,merchant:2};const g=prompt("অনলাইন: পাহারাদার (Guard) কতটি থাকবে? (ডিফল্ট ৬)",String(cur.guard));const m=prompt("অনলাইন: বণিক (Merchant) কতটি থাকবে? (ডিফল্ট ২)",String(cur.merchant));const ng=parseInt(g??"",10);const nm=parseInt(m??"",10);const next={guard:Number.isFinite(ng)?ng:cur.guard,merchant:Number.isFinite(nm)?nm:cur.merchant};window.__jdSetCardCounts&&window.__jdSetCardCounts(next);R("start_game",{cardCounts:next});return}catch(e){}}R("start_game")}';
+        'function O(){Jt();if(c===0){try{const next=window.__jdGetCardCounts?window.__jdGetCardCounts():{guard:6,merchant:2};window.__jdSetCardCounts&&window.__jdSetCardCounts(next);R("start_game",{cardCounts:next});return}catch(e){}}R("start_game")}';
       if (code.includes(oldStartGameFn)) code = code.replace(oldStartGameFn, newStartGameFn);
 
       const oldOnGameState = 'Y.on("game_state",({state:ne})=>{i(ne),y("playing"),E(null)})';
@@ -159,7 +345,7 @@
         URL.revokeObjectURL(blobUrl);
       }
     </script>
-    <link rel="stylesheet" crossorigin href="./assets/index-CVHLiWwd.css?v=10">
+    <link rel="stylesheet" crossorigin href="./assets/index-CVHLiWwd.css?v=11">
   </head>
   <body>
     <div id="root"></div>
