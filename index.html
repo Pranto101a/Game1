@@ -68,7 +68,7 @@
       };
       window.__jdSetCardCounts(window.__jdGetCardCounts());
 
-      const entryUrl = new URL("./assets/index-Er7WoFSS.js?v=13", import.meta.url);
+      const entryUrl = new URL("./assets/index-Er7WoFSS.js?v=17", import.meta.url);
       const res = await fetch(entryUrl);
       let code = await res.text();
 
@@ -353,6 +353,35 @@
         'Sx.map(h=>{const __cc=typeof window!==\"undefined\"&&window.__jdGetCardCounts?window.__jdGetCardCounts():{};const m=h===\"guard\"?(__cc.guard??Jh[h]):h===\"merchant\"?(__cc.merchant??Jh[h]):Jh[h],p=f[h]??0,';
       if (code.includes(oldTrackerCounts2)) code = code.replace(oldTrackerCounts2, newTrackerCounts2);
 
+      // 10) Ship worker (জাহাজ কর্মচারী): if AI/bot plays it, do NOT reveal the peeked card on screen
+      const oldShipWorkerPeek =
+        'if(i===\"ship_worker\"){const l=r.players[n],c=l.hand[0]??null,f=`${r.players[r.currentPlayerIndex].name} ${l.name}-এর কার্ড দেখেছেন।`;return zt({...r,peekCard:c,resultMessage:`${l.name}-এর হাতে আছে: ${c?Te[c]:\"???\"}`,playStep:\"peek_result\"},f)}';
+      const newShipWorkerPeek =
+        'if(i===\"ship_worker\"){const l=r.players[n],c=l.hand[0]??null,h=r.players[r.currentPlayerIndex],f=`${h.name} ${l.name}-এর কার্ড দেখেছেন।`;return h.isHuman?zt({...r,peekCard:c,resultMessage:`${l.name}-এর হাতে আছে: ${c?Te[c]:\"???\"}`,playStep:\"peek_result\"},f):zt({...r,peekCard:c,resultMessage:`${h.name} ${l.name}-এর কার্ড দেখেছে।`,playStep:\"show_result\"},f)}';
+      if (code.includes(oldShipWorkerPeek)) code = code.replace(oldShipWorkerPeek, newShipWorkerPeek);
+
+      // 11) Smarter AI:
+      // - better target choice (prefer higher-token players)
+      // - better guard guess (use remaining counts based on discards)
+      const oldAiTarget =
+        'function e3(e,n){const i=n[Math.floor(Math.random()*n.length)],r={...e,targetPlayerIndex:i};return e.cardBeingPlayed===\"guard\"?lw(r,i):rw(r,i)}';
+      const newAiTarget =
+        'function e3(e,n){const i=n.reduce((a,b)=>{const A=e.players[a]?.tokens??0,B=e.players[b]?.tokens??0;return B>A?b:a},n[0]),r={...e,targetPlayerIndex:i};return e.cardBeingPlayed===\"guard\"?lw(r,i):rw(r,i)}';
+      if (code.includes(oldAiTarget)) code = code.replace(oldAiTarget, newAiTarget);
+
+      const oldAiGuardGuess =
+        'function lw(e,n){const i=[\"ship_worker\",\"swordsman\",\"cannon\",\"merchant\",\"sailor\",\"captain\",\"spy\",\"pirate\",\"petty_thief\"],r=i[Math.floor(Math.random()*i.length)];return aw({...e,targetPlayerIndex:n},r)}';
+      const newAiGuardGuess =
+        'function lw(e,n){const i=[\"ship_worker\",\"swordsman\",\"cannon\",\"merchant\",\"sailor\",\"captain\",\"spy\",\"pirate\",\"petty_thief\"];const cc=typeof window!==\"undefined\"&&window.__jdGetCardCounts?window.__jdGetCardCounts():{};const base={...Jh,guard:cc.guard??Jh.guard,merchant:cc.merchant??Jh.merchant};const used={};for(const p of e.players)for(const d of p.discardPile)used[d]=(used[d]??0)+1;let bestCnt=-1,cands=[];for(const id of i){const left=(base[id]??0)-(used[id]??0);if(left>bestCnt){bestCnt=left;cands=[id]}else if(left===bestCnt){cands.push(id)}}const pick=(cands.length?cands:i);const best=pick[Math.floor(Math.random()*pick.length)];return aw({...e,targetPlayerIndex:n},best)}';
+      if (code.includes(oldAiGuardGuess)) code = code.replace(oldAiGuardGuess, newAiGuardGuess);
+
+      // 12) Smarter AI play choice: avoid suicidal swordsman when remaining card is weak
+      const oldAiTakeTurn =
+        'function o3(e){const i=e.players[e.currentPlayerIndex].hand;if(Wd(i))return Ji(e,i.indexOf(\"captain\"));for(const l of a3){const c=i.indexOf(l);if(c!==-1)if(r3.includes(l)){if(gc(e,l).length>0||l===\"cannon\")return Ji(e,c)}else return Ji(e,c)}const r=i.reduce((l,c,f)=>{if(c===\"pirate\")return l;const h=Rt[c];return h<l.val?{idx:f,val:h}:l},{idx:0,val:1/0});return Ji(e,r.val===1/0?0:r.idx)}';
+      const newAiTakeTurn =
+        'function o3(e){const me=e.players[e.currentPlayerIndex],hand=me.hand;if(Wd(hand))return Ji(e,hand.indexOf(\"captain\"));const cc=typeof window!==\"undefined\"&&window.__jdGetCardCounts?window.__jdGetCardCounts():{};const base={...Jh,guard:cc.guard??Jh.guard,merchant:cc.merchant??Jh.merchant};const used={};for(const p of e.players)for(const d of p.discardPile)used[d]=(used[d]??0)+1;for(const h of hand)used[h]=(used[h]??0)+1;const ids=Object.keys(base);let tot=0;const left={};for(const id of ids){const v=Math.max(0,(base[id]??0)-(used[id]??0));left[id]=v;tot+=v}function probLess(val){if(tot<=0)return.5;let s=0;for(const id of ids){const pv=left[id]/tot;if((Rt[id]??-1)<val)s+=pv}return s}function needTargets(cardId){return r3.includes(cardId)&&cardId!==\"cannon\"}function score(cardId,other){const ov=other?Rt[other]:-1;const haveTargets=!needTargets(cardId)||gc(e,cardId).length>0||cardId===\"cannon\";if(!haveTargets&&r3.includes(cardId))return-1e9;let sc=0;switch(cardId){case\"pirate\":sc=-1e9;break;case\"swordsman\":{if(ov<=3)sc=-1e9;else{const wp=probLess(ov);sc=30+wp*80+ov*2}break}case\"cannon\":sc=55+(ov>=7?10:0);break;case\"sailor\":sc=(ov<=3?60:25)+(ov<=1?10:0);break;case\"guard\":sc=40+(ov>=7?8:0);break;case\"merchant\":sc=48;break;case\"spy\":sc=(ov>=7?52:18);break;case\"ship_worker\":sc=34;break;case\"petty_thief\":sc=22;break;case\"captain\":sc=10;break;default:sc=15}sc+=Math.max(0,ov);return sc}let bestIdx=0,best=-1e9;for(let i=0;i<hand.length;i++){const card=hand[i];const other=hand[i===0?1:0];const sc=score(card,other);if(sc>best){best=sc;bestIdx=i}}return Ji(e,bestIdx)}';
+      if (code.includes(oldAiTakeTurn)) code = code.replace(oldAiTakeTurn, newAiTakeTurn);
+
       const blobUrl = URL.createObjectURL(new Blob([code], { type: "text/javascript" }));
       try {
         await import(blobUrl);
@@ -360,7 +389,7 @@
         URL.revokeObjectURL(blobUrl);
       }
     </script>
-    <link rel="stylesheet" crossorigin href="./assets/index-CVHLiWwd.css?v=13">
+    <link rel="stylesheet" crossorigin href="./assets/index-CVHLiWwd.css?v=17">
   </head>
   <body>
     <div id="root"></div>
