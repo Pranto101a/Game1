@@ -68,7 +68,7 @@ var CARD_NAMES_BN = {
 function shuffle(arr) {
   let a = [...arr];
   // Extra mixing + random "cut" to reduce perceived patterns when starting games repeatedly.
-  for (let pass = 0; pass < 2; pass++) {
+  for (let pass = 0; pass < 6; pass++) {
     for (let i = a.length - 1; i > 0; i--) {
       const j = randInt(i + 1);
       [a[i], a[j]] = [a[j], a[i]];
@@ -77,6 +77,8 @@ function shuffle(arr) {
   if (a.length > 1) {
     const cut = randInt(a.length);
     a = a.slice(cut).concat(a.slice(0, cut));
+    const cut2 = randInt(a.length);
+    a = a.slice(cut2).concat(a.slice(0, cut2));
   }
   return a;
 }
