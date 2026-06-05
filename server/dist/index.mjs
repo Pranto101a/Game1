@@ -65,22 +65,53 @@ var CARD_NAMES_BN = {
   captain: "\u0995\u09CD\u09AF\u09BE\u09AA\u09CD\u099F\u09C7\u09A8",
   pirate: "\u099C\u09B2\u09A6\u09B8\u09CD\u09AF\u09C1"
 };
-function shuffle(arr) {
-  let a = [...arr];
-  // Extra mixing + random "cut" to reduce perceived patterns when starting games repeatedly.
-  for (let pass = 0; pass < 6; pass++) {
-    for (let i = a.length - 1; i > 0; i--) {
-      const j = randInt(i + 1);
-      [a[i], a[j]] = [a[j], a[i]];
+function deckBadScore(a, numPlayers) {
+  try {
+    if (!numPlayers || numPlayers < 2) return 0;
+    const init = a.slice(-(numPlayers + 1));
+    let score = 0;
+    const hasPirate = init.includes("pirate");
+    const hasSwordsman = init.includes("swordsman");
+    if (hasPirate && hasSwordsman) score += 3;
+    let merchants = 0;
+    for (const c of init) if (c === "merchant") merchants++;
+    if (merchants >= 2) score += 2;
+    const look = Math.min(a.length, numPlayers + 10);
+    const order = a.slice(-look).slice().reverse(); // draw order (pop)
+    for (let i = 0; i < order.length - 1; i++) {
+      const x = order[i], y = order[i + 1];
+      if (x === "merchant" && y === "merchant") score += 2;
+      if (x === "pirate" && y === "swordsman") score += 2;
+      if (x === "swordsman" && y === "pirate") score += 2;
     }
+    return score;
+  } catch {
+    return 0;
   }
-  if (a.length > 1) {
-    const cut = randInt(a.length);
-    a = a.slice(cut).concat(a.slice(0, cut));
-    const cut2 = randInt(a.length);
-    a = a.slice(cut2).concat(a.slice(0, cut2));
+}
+
+function shuffle(arr, numPlayers) {
+  // We still use crypto-based randomness, but we also do a light "anti-pattern" retry
+  // to reduce the chance of getting the same-feeling combos at the start.
+  for (let attempt = 0; attempt < 4; attempt++) {
+    let a = [...arr];
+    // Extra mixing + random "cut" to reduce perceived patterns when starting games repeatedly.
+    for (let pass = 0; pass < 6; pass++) {
+      for (let i = a.length - 1; i > 0; i--) {
+        const j = randInt(i + 1);
+        [a[i], a[j]] = [a[j], a[i]];
+      }
+    }
+    if (a.length > 1) {
+      const cut = randInt(a.length);
+      a = a.slice(cut).concat(a.slice(0, cut));
+      const cut2 = randInt(a.length);
+      a = a.slice(cut2).concat(a.slice(0, cut2));
+    }
+    const score = deckBadScore(a, numPlayers);
+    if (score === 0 || attempt === 3) return a;
   }
-  return a;
+  return [...arr];
 }
 function createDeck(cardCounts = DEFAULT_CARD_COUNTS) {
   const deck = [];
@@ -115,7 +146,7 @@ function hasMultipleHumans(players) {
 function initGame(configs, online, cardCountsOverride, tokensToWinOverride) {
   const numPlayers = configs.length;
   const cardCounts = { ...DEFAULT_CARD_COUNTS, ...sanitizeCardCountsOverride(cardCountsOverride) };
-  const deck = shuffle(createDeck(cardCounts));
+  const deck = shuffle(createDeck(cardCounts), numPlayers);
   const hiddenCard = deck.pop();
   const tokensOverride = sanitizeTokensToWinOverride(tokensToWinOverride);
   const players = configs.map((cfg, i) => ({
@@ -495,7 +526,7 @@ function endRound(state, winnerId) {
   return { ...s, phase: "round_end" };
 }
 function startNewRound(state, firstPlayerIdx) {
-  const deck = shuffle(createDeck(state.cardCounts ?? DEFAULT_CARD_COUNTS));
+  const deck = shuffle(createDeck(state.cardCounts ?? DEFAULT_CARD_COUNTS), state.players.length);
   const hiddenCard = deck.pop();
   const players = state.players.map((p) => ({
     ...p,
