@@ -133,6 +133,40 @@
         try { window.__jdSetTokensToWinOverride && window.__jdSetTokensToWinOverride(null); } catch {}
       };
 
+      // --- Online rejoin reliability (BFCache / tab-switch issues) ---
+      // If user leaves the website and comes back via browser back/recents, pages can be restored from BFCache.
+      // In that case socket connections may be dead and the app won't respond until a manual refresh.
+      // Fix: when returning to an online session, auto-reload once so the socket reconnects cleanly.
+      (function fixOnlineBackForwardCache() {
+        function hasOnlineSession() {
+          try {
+            return !!(sessionStorage.getItem("jd_online_room") && sessionStorage.getItem("jd_online_player_id") != null);
+          } catch {
+            return false;
+          }
+        }
+        window.addEventListener("pageshow", (ev) => {
+          try {
+            if (!hasOnlineSession()) return;
+            if (ev && ev.persisted) window.location.reload();
+          } catch {}
+        });
+        document.addEventListener("visibilitychange", () => {
+          try {
+            if (!hasOnlineSession()) return;
+            if (document.visibilityState === "visible") {
+              // small delay so browser finishes restoring the page
+              setTimeout(() => {
+                try {
+                  // if the app is "stuck" after returning, reload fixes socket + state
+                  window.location.reload();
+                } catch {}
+              }, 300);
+            }
+          } catch {}
+        });
+      })();
+
       const entryUrl = new URL("./assets/index-Er7WoFSS.js?v=17", import.meta.url);
       const res = await fetch(entryUrl);
       let code = await res.text();
@@ -425,7 +459,7 @@
       const oldShuffle =
         'function em(e){const n=[...e];for(let i=n.length-1;i>0;i--){const r=Math.floor(Math.random()*(i+1));[n[i],n[r]]=[n[r],n[i]]}return n}';
       const newShuffle =
-        'function __secureRandInt(e){if(typeof crypto!=="undefined"&&crypto.getRandomValues){const n=new Uint32Array(1);const t=4294967296-4294967296%e;let r;do{crypto.getRandomValues(n);r=n[0]}while(r>=t);return r%e}return Math.floor(Math.random()*e)}function em(e){let n=[...e];for(let p=0;p<6;p++){for(let i=n.length-1;i>0;i--){const r=__secureRandInt(i+1);[n[i],n[r]]=[n[r],n[i]]}}if(n.length>1){const c=__secureRandInt(n.length);n=n.slice(c).concat(n.slice(0,c));const d=__secureRandInt(n.length);n=n.slice(d).concat(n.slice(0,d))}return n}';
+        'function __secureRandInt(e){if(typeof crypto!=="undefined"&&crypto.getRandomValues){const n=new Uint32Array(1);const t=4294967296-4294967296%e;let r;do{crypto.getRandomValues(n);r=n[0]}while(r>=t);return r%e}return Math.floor(Math.random()*e)}function __jdNumPlayers(){try{const n=parseInt(sessionStorage.getItem(\"jd_num_players\")||\"0\",10);return Number.isFinite(n)?n:0}catch{return 0}}function __jdBadScore(d){const np=__jdNumPlayers();if(!np||np<2)return 0;const init=d.slice(-(np+1));let s=0;const hasPir=init.includes(\"pirate\"),hasSw=init.includes(\"swordsman\");if(hasPir&&hasSw)s+=3;let merch=0;for(const c of init)if(c===\"merchant\")merch++;if(merch>=2)s+=2;const look=Math.min(d.length,np+10);const order=d.slice(-look).slice().reverse();for(let i=0;i<order.length-1;i++){const a=order[i],b=order[i+1];if((a===\"pirate\"&&b===\"swordsman\")||(a===\"swordsman\"&&b===\"pirate\"))s+=2;if(a===\"merchant\"&&b===\"merchant\")s+=2}return s}function em(e){for(let attempt=0;attempt<4;attempt++){let n=[...e];for(let p=0;p<6;p++){for(let i=n.length-1;i>0;i--){const r=__secureRandInt(i+1);[n[i],n[r]]=[n[r],n[i]]}}if(n.length>1){const c=__secureRandInt(n.length);n=n.slice(c).concat(n.slice(0,c));const d=__secureRandInt(n.length);n=n.slice(d).concat(n.slice(0,d))}const sc=__jdBadScore(n);if(sc===0||attempt===3)return n}return [...e]}';
       if (code.includes(oldShuffle)) code = code.replace(oldShuffle, newShuffle);
 
       // 5) Guard/Merchant counts selection:
@@ -464,7 +498,7 @@
       const oldOfflinePlayersFn =
         'function b(){Jt();const w=["Blackbeard","Redbeard","Ironhook","Bluecoat","Silversail"],E=[...c.map((A,R)=>({name:A||`খেলোয়াড় ${R+1}`,isHuman:!0})),...Array.from({length:r},(A,R)=>({name:w[R]??`Bot ${R+1}`,isHuman:!1}))];sessionStorage.setItem("jd_players",JSON.stringify(E)),e("/game")}';
       const newOfflinePlayersFn =
-        'function b(){Jt();const w=["Blackbeard","Redbeard","Ironhook","Bluecoat","Silversail"],E=[...c.slice(0,p).map((A,R)=>({name:A||`খেলোয়াড় ${R+1}`,isHuman:!0})),...Array.from({length:r},(A,R)=>({name:w[R]??`Bot ${R+1}`,isHuman:!1}))];sessionStorage.setItem("jd_players",JSON.stringify(E)),e("/game")}';
+        'function b(){Jt();const w=["Blackbeard","Redbeard","Ironhook","Bluecoat","Silversail"],E=[...c.slice(0,p).map((A,R)=>({name:A||`খেলোয়াড় ${R+1}`,isHuman:!0})),...Array.from({length:r},(A,R)=>({name:w[R]??`Bot ${R+1}`,isHuman:!1}))];sessionStorage.setItem("jd_num_players",String(E.length)),sessionStorage.setItem("jd_players",JSON.stringify(E)),e("/game")}';
       if (code.includes(oldOfflinePlayersFn)) code = code.replace(oldOfflinePlayersFn, newOfflinePlayersFn);
 
       const oldOnGameState = 'Y.on("game_state",({state:ne})=>{i(ne),y("playing"),E(null)})';
