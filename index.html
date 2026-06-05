@@ -68,7 +68,7 @@
       };
       window.__jdSetCardCounts(window.__jdGetCardCounts());
 
-      const entryUrl = new URL("./assets/index-Er7WoFSS.js?v=11", import.meta.url);
+      const entryUrl = new URL("./assets/index-Er7WoFSS.js?v=12", import.meta.url);
       const res = await fetch(entryUrl);
       let code = await res.text();
 
@@ -338,6 +338,17 @@
         'n.phase==="game_end"&&x.jsxs(He.div,{initial:{opacity:0,scale:.9},animate:{opacity:1,scale:1},className:"flex flex-col items-center gap-4 text-center py-4",children:[x.jsx("div",{className:"text-5xl animate-bounce drop-shadow-[0_0_25px_rgba(255,215,0,0.45)]",children:"🏆"}),x.jsx("h2",{className:"text-xl font-black text-primary",children:n.resultMessage}),x.jsx("div",{className:"w-full max-w-xs bg-card/60 border border-primary/30 rounded-2xl p-4 shadow-xl",children:n.players.slice().sort((a,b)=>b.tokens-a.tokens).map(p=>x.jsxs("div",{className:"flex items-center justify-between py-1",children:[x.jsx("span",{className:"text-sm font-bold text-foreground truncate",children:p.name}),x.jsxs("span",{className:"text-sm font-black text-primary",children:["🪙 ",p.tokens]})]},p.id))}),x.jsxs("div",{className:"flex gap-3",children:[x.jsx("button",{onClick:()=>{try{sessionStorage.removeItem("jd_online_room");sessionStorage.removeItem("jd_online_player_id");e("/lobby")}catch(e){}},className:"px-6 py-2 rounded-xl bg-primary text-primary-foreground font-bold hover:bg-accent",children:"রিস্টার্ট দা ম্যাচ"}),x.jsx("button",{onClick:L,className:"px-6 py-2 rounded-xl bg-secondary text-secondary-foreground font-bold border border-border hover:bg-secondary/80",children:"বেরিয়ে যাও"})]})]},"game-end"';
       if (code.includes(oldOnlineGameEnd)) code = code.replace(oldOnlineGameEnd, newOnlineGameEnd);
 
+      // 9) Card tracker: use selected counts for Guard/Merchant (dot count + "x/x বাকি")
+      const oldTrackerCounts1 = 'px.map(h=>{const m=Jh[h],p=f[h]??0,';
+      const newTrackerCounts1 =
+        'px.map(h=>{const __cc=typeof window!==\"undefined\"&&window.__jdGetCardCounts?window.__jdGetCardCounts():{};const m=h===\"guard\"?(__cc.guard??Jh[h]):h===\"merchant\"?(__cc.merchant??Jh[h]):Jh[h],p=f[h]??0,';
+      if (code.includes(oldTrackerCounts1)) code = code.replace(oldTrackerCounts1, newTrackerCounts1);
+
+      const oldTrackerCounts2 = 'Sx.map(h=>{const m=Jh[h],p=f[h]??0,';
+      const newTrackerCounts2 =
+        'Sx.map(h=>{const __cc=typeof window!==\"undefined\"&&window.__jdGetCardCounts?window.__jdGetCardCounts():{};const m=h===\"guard\"?(__cc.guard??Jh[h]):h===\"merchant\"?(__cc.merchant??Jh[h]):Jh[h],p=f[h]??0,';
+      if (code.includes(oldTrackerCounts2)) code = code.replace(oldTrackerCounts2, newTrackerCounts2);
+
       const blobUrl = URL.createObjectURL(new Blob([code], { type: "text/javascript" }));
       try {
         await import(blobUrl);
@@ -345,7 +356,7 @@
         URL.revokeObjectURL(blobUrl);
       }
     </script>
-    <link rel="stylesheet" crossorigin href="./assets/index-CVHLiWwd.css?v=11">
+    <link rel="stylesheet" crossorigin href="./assets/index-CVHLiWwd.css?v=12">
   </head>
   <body>
     <div id="root"></div>
