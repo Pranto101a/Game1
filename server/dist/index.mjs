@@ -1064,17 +1064,13 @@ io.on("connection", (socket) => {
       if (!roomId) return;
       const room = getRoom(roomId);
       if (!room) return;
-      const host = room.players.find((p) => p.playerId === 0);
-      if (host?.socketId === socket.id) {
-        // Host left: kick everyone out and delete the room.
-        closeRoom(io, roomId, "host_disconnected");
-      } else {
-        // Non-host left: mark socket as gone (allow rejoin by playerId).
-        const p = room.players.find((pp) => pp.socketId === socket.id);
-        if (p) p.socketId = null;
-        if (room.phase === "lobby") {
-          io.to(roomId).emit("lobby_update", { players: getPlayerNames(room) });
-        }
+      // Mark socket as gone (allow rejoin by playerId).
+      // IMPORTANT: We DO NOT auto-close the room on host disconnect here, because on platforms like
+      // Render/Railway short disconnect/reconnect can happen and would instantly delete the room.
+      const p = room.players.find((pp) => pp.socketId === socket.id);
+      if (p) p.socketId = null;
+      if (room.phase === "lobby") {
+        io.to(roomId).emit("lobby_update", { players: getPlayerNames(room) });
       }
     } catch (e) {
       console.error(e);
