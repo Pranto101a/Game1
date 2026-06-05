@@ -39,7 +39,36 @@
       - লোকাল মাল্টিপ্লেয়ার (একাধিক মানুষ) হলে তলোয়ারবাজের ফলে কার্ডের নাম প্রকাশ না করা
     -->
     <script type="module">
-      const entryUrl = new URL("./assets/index-Er7WoFSS.js?v=8", import.meta.url);
+      // --- Card count override (only Guard + Merchant) ---
+      // Stored in localStorage so offline/online can reuse the last selection.
+      const __JD_DEFAULT_COUNTS = { guard: 6, merchant: 2 };
+      window.__jdGetCardCounts = function () {
+        try {
+          const raw = localStorage.getItem("jd_card_counts");
+          if (!raw) return { ...__JD_DEFAULT_COUNTS };
+          const v = JSON.parse(raw);
+          const g = Number.isFinite(+v.guard) ? Math.max(0, Math.min(20, Math.trunc(+v.guard))) : __JD_DEFAULT_COUNTS.guard;
+          const m = Number.isFinite(+v.merchant) ? Math.max(0, Math.min(20, Math.trunc(+v.merchant))) : __JD_DEFAULT_COUNTS.merchant;
+          return { guard: g, merchant: m };
+        } catch {
+          return { ...__JD_DEFAULT_COUNTS };
+        }
+      };
+      window.__jdSetCardCounts = function (counts) {
+        try {
+          const g = Number.isFinite(+counts?.guard) ? Math.max(0, Math.min(20, Math.trunc(+counts.guard))) : __JD_DEFAULT_COUNTS.guard;
+          const m = Number.isFinite(+counts?.merchant) ? Math.max(0, Math.min(20, Math.trunc(+counts.merchant))) : __JD_DEFAULT_COUNTS.merchant;
+          const out = { guard: g, merchant: m };
+          window.__jd_card_counts = out;
+          localStorage.setItem("jd_card_counts", JSON.stringify(out));
+          return out;
+        } catch {
+          return { ...__JD_DEFAULT_COUNTS };
+        }
+      };
+      window.__jdSetCardCounts(window.__jdGetCardCounts());
+
+      const entryUrl = new URL("./assets/index-Er7WoFSS.js?v=10", import.meta.url);
       const res = await fetch(entryUrl);
       let code = await res.text();
 
@@ -68,8 +97,60 @@
       const oldShuffle =
         'function em(e){const n=[...e];for(let i=n.length-1;i>0;i--){const r=Math.floor(Math.random()*(i+1));[n[i],n[r]]=[n[r],n[i]]}return n}';
       const newShuffle =
-        'function __secureRandInt(e){if(typeof crypto!=="undefined"&&crypto.getRandomValues){const n=new Uint32Array(1);const t=4294967296-4294967296%e;let r;do{crypto.getRandomValues(n);r=n[0]}while(r>=t);return r%e}return Math.floor(Math.random()*e)}function em(e){const n=[...e];for(let i=n.length-1;i>0;i--){const r=__secureRandInt(i+1);[n[i],n[r]]=[n[r],n[i]]}return n}';
+        'function __secureRandInt(e){if(typeof crypto!=="undefined"&&crypto.getRandomValues){const n=new Uint32Array(1);const t=4294967296-4294967296%e;let r;do{crypto.getRandomValues(n);r=n[0]}while(r>=t);return r%e}return Math.floor(Math.random()*e)}function em(e){let n=[...e];for(let p=0;p<2;p++){for(let i=n.length-1;i>0;i--){const r=__secureRandInt(i+1);[n[i],n[r]]=[n[r],n[i]]}}if(n.length>1){const c=__secureRandInt(n.length);n=n.slice(c).concat(n.slice(0,c))}return n}';
       if (code.includes(oldShuffle)) code = code.replace(oldShuffle, newShuffle);
+
+      // 5) Guard/Merchant counts selection:
+      // - Offline: after player select (start button click)
+      // - Online: host selects when starting the room
+      // - Only Guard (পাহারাদার) + Merchant (বণিক) are configurable; everything else stays default
+      const oldIw =
+        'function iw(){const e=[];for(const[n,i]of Object.entries(Jh))for(let r=0;r<i;r++)e.push(n);return e}';
+      const newIw =
+        'function iw(){const e=[];const o=typeof window!=="undefined"&&window.__jdGetCardCounts?window.__jdGetCardCounts():{};const u={...Jh,guard:o.guard??Jh.guard,merchant:o.merchant??Jh.merchant};for(const[n,i]of Object.entries(u))for(let r=0;r<i;r++)e.push(n);return e}';
+      if (code.includes(oldIw)) code = code.replace(oldIw, newIw);
+
+      const oldOfflineStart =
+        'x.jsx("button",{onClick:b,className:"w-full py-3 rounded-xl bg-primary text-primary-foreground font-bold text-lg hover:bg-accent transition-all hover:scale-[1.02] active:scale-[0.98] shadow-lg",children:"⚓ খেলা শুরু করুন"})';
+      const newOfflineStart =
+        'x.jsx("button",{onClick:()=>{try{const cur=window.__jdGetCardCounts?window.__jdGetCardCounts():{guard:6,merchant:2};const g=prompt("পাহারাদার (Guard) কতটি থাকবে? (ডিফল্ট ৬)",String(cur.guard));const m=prompt("বণিক (Merchant) কতটি থাকবে? (ডিফল্ট ২)",String(cur.merchant));const ng=parseInt(g??"",10);const nm=parseInt(m??"",10);const next={guard:Number.isFinite(ng)?ng:cur.guard,merchant:Number.isFinite(nm)?nm:cur.merchant};window.__jdSetCardCounts&&window.__jdSetCardCounts(next)}catch(e){}b()},className:"w-full py-3 rounded-xl bg-primary text-primary-foreground font-bold text-lg hover:bg-accent transition-all hover:scale-[1.02] active:scale-[0.98] shadow-lg",children:"⚓ খেলা শুরু করুন"})';
+      if (code.includes(oldOfflineStart)) code = code.replace(oldOfflineStart, newOfflineStart);
+
+      const oldStartGameFn = 'function O(){Jt(),R("start_game")}';
+      const newStartGameFn =
+        'function O(){Jt();if(c===0){try{const cur=window.__jdGetCardCounts?window.__jdGetCardCounts():{guard:6,merchant:2};const g=prompt("অনলাইন: পাহারাদার (Guard) কতটি থাকবে? (ডিফল্ট ৬)",String(cur.guard));const m=prompt("অনলাইন: বণিক (Merchant) কতটি থাকবে? (ডিফল্ট ২)",String(cur.merchant));const ng=parseInt(g??"",10);const nm=parseInt(m??"",10);const next={guard:Number.isFinite(ng)?ng:cur.guard,merchant:Number.isFinite(nm)?nm:cur.merchant};window.__jdSetCardCounts&&window.__jdSetCardCounts(next);R("start_game",{cardCounts:next});return}catch(e){}}R("start_game")}';
+      if (code.includes(oldStartGameFn)) code = code.replace(oldStartGameFn, newStartGameFn);
+
+      const oldOnGameState = 'Y.on("game_state",({state:ne})=>{i(ne),y("playing"),E(null)})';
+      const newOnGameState =
+        'Y.on("game_state",({state:ne})=>{try{ne&&ne.cardCounts&&window.__jdSetCardCounts&&window.__jdSetCardCounts(ne.cardCounts)}catch(e){}i(ne),y("playing"),E(null)})';
+      if (code.includes(oldOnGameState)) code = code.replace(oldOnGameState, newOnGameState);
+
+      const oldOnAck = 'Y.on("game_action_ack",({state:ne})=>{i(ne),E(null)})';
+      const newOnAck =
+        'Y.on("game_action_ack",({state:ne})=>{try{ne&&ne.cardCounts&&window.__jdSetCardCounts&&window.__jdSetCardCounts(ne.cardCounts)}catch(e){}i(ne),E(null)})';
+      if (code.includes(oldOnAck)) code = code.replace(oldOnAck, newOnAck);
+
+      // 6) Offline: round end screen should only show "পরবর্তী রাউন্ড" (no "নতুন খেলা")
+      const oldRoundEndBtns =
+        'x.jsxs("div",{className:"flex gap-3",children:[x.jsx("button",{onClick:k,className:"px-6 py-2 rounded-xl bg-primary text-primary-foreground font-bold hover:bg-accent",children:"পরবর্তী রাউন্ড"}),x.jsx("button",{onClick:V,className:"px-6 py-2 rounded-xl bg-secondary text-secondary-foreground font-bold border border-border",children:"নতুন খেলা"})]})]';
+      const newRoundEndBtns =
+        'x.jsx("div",{className:"flex gap-3",children:x.jsx("button",{onClick:k,className:"px-6 py-2 rounded-xl bg-primary text-primary-foreground font-bold hover:bg-accent",children:"পরবর্তী রাউন্ড"})})]';
+      if (code.includes(oldRoundEndBtns)) code = code.replace(oldRoundEndBtns, newRoundEndBtns);
+
+      // 7) Match end (offline): winner + coin counts + "রিস্টার্ট দা ম্যাচ" + "বেরিয়ে যাও"
+      const oldOfflineGameEnd =
+        'n.phase==="game_end"&&x.jsxs(He.div,{initial:{opacity:0,scale:.9},animate:{opacity:1,scale:1},className:"flex-1 flex flex-col items-center justify-center gap-4 text-center",children:[x.jsx("div",{className:"text-6xl",children:"🏆"}),x.jsx("h2",{className:"text-2xl font-bold text-primary",children:n.resultMessage}),x.jsx("div",{className:"flex gap-3",children:x.jsx("button",{onClick:V,className:"px-6 py-2 rounded-xl bg-secondary text-secondary-foreground font-bold border border-border hover:bg-secondary/80",children:"নতুন খেলা"})})]},"game-end"';
+      const newOfflineGameEnd =
+        'n.phase==="game_end"&&x.jsxs(He.div,{initial:{opacity:0,scale:.9},animate:{opacity:1,scale:1},className:"flex-1 flex flex-col items-center justify-center gap-4 text-center",children:[x.jsx("div",{className:"text-6xl animate-bounce drop-shadow-[0_0_25px_rgba(255,215,0,0.45)]",children:"🏆"}),x.jsx("h2",{className:"text-2xl font-black text-primary",children:n.resultMessage}),x.jsx("div",{className:"w-full max-w-xs bg-card/60 border border-primary/30 rounded-2xl p-4 shadow-xl",children:n.players.slice().sort((a,b)=>b.tokens-a.tokens).map(p=>x.jsxs("div",{className:"flex items-center justify-between py-1",children:[x.jsx("span",{className:"text-sm font-bold text-foreground truncate",children:p.name}),x.jsxs("span",{className:"text-sm font-black text-primary",children:["🪙 ",p.tokens]})]},p.id))}),x.jsxs("div",{className:"flex gap-3",children:[x.jsx("button",{onClick:()=>{try{const P=sessionStorage.getItem("jd_players");P&&c(Qj(JSON.parse(P)))}catch(e){}},className:"px-6 py-2 rounded-xl bg-primary text-primary-foreground font-bold hover:bg-accent",children:"রিস্টার্ট দা ম্যাচ"}),x.jsx("button",{onClick:V,className:"px-6 py-2 rounded-xl bg-secondary text-secondary-foreground font-bold border border-border hover:bg-secondary/80",children:"বেরিয়ে যাও"})]})]},"game-end"';
+      if (code.includes(oldOfflineGameEnd)) code = code.replace(oldOfflineGameEnd, newOfflineGameEnd);
+
+      // 8) Match end (online): winner + coin counts + "রিস্টার্ট দা ম্যাচ" + "বেরিয়ে যাও"
+      const oldOnlineGameEnd =
+        'n.phase==="game_end"&&x.jsxs(He.div,{initial:{opacity:0,scale:.9},animate:{opacity:1,scale:1},className:"flex flex-col items-center gap-4 text-center py-4",children:[x.jsx("div",{className:"text-5xl",children:"🏆"}),x.jsx("h2",{className:"text-xl font-bold text-primary",children:n.resultMessage}),x.jsx("button",{onClick:L,className:"px-6 py-2 rounded-xl bg-primary text-primary-foreground font-bold hover:bg-accent",children:"বেরিয়ে যান"})]},"game-end"';
+      const newOnlineGameEnd =
+        'n.phase==="game_end"&&x.jsxs(He.div,{initial:{opacity:0,scale:.9},animate:{opacity:1,scale:1},className:"flex flex-col items-center gap-4 text-center py-4",children:[x.jsx("div",{className:"text-5xl animate-bounce drop-shadow-[0_0_25px_rgba(255,215,0,0.45)]",children:"🏆"}),x.jsx("h2",{className:"text-xl font-black text-primary",children:n.resultMessage}),x.jsx("div",{className:"w-full max-w-xs bg-card/60 border border-primary/30 rounded-2xl p-4 shadow-xl",children:n.players.slice().sort((a,b)=>b.tokens-a.tokens).map(p=>x.jsxs("div",{className:"flex items-center justify-between py-1",children:[x.jsx("span",{className:"text-sm font-bold text-foreground truncate",children:p.name}),x.jsxs("span",{className:"text-sm font-black text-primary",children:["🪙 ",p.tokens]})]},p.id))}),x.jsxs("div",{className:"flex gap-3",children:[x.jsx("button",{onClick:()=>{try{sessionStorage.removeItem("jd_online_room");sessionStorage.removeItem("jd_online_player_id");e("/lobby")}catch(e){}},className:"px-6 py-2 rounded-xl bg-primary text-primary-foreground font-bold hover:bg-accent",children:"রিস্টার্ট দা ম্যাচ"}),x.jsx("button",{onClick:L,className:"px-6 py-2 rounded-xl bg-secondary text-secondary-foreground font-bold border border-border hover:bg-secondary/80",children:"বেরিয়ে যাও"})]})]},"game-end"';
+      if (code.includes(oldOnlineGameEnd)) code = code.replace(oldOnlineGameEnd, newOnlineGameEnd);
 
       const blobUrl = URL.createObjectURL(new Blob([code], { type: "text/javascript" }));
       try {
@@ -78,7 +159,7 @@
         URL.revokeObjectURL(blobUrl);
       }
     </script>
-    <link rel="stylesheet" crossorigin href="./assets/index-CVHLiWwd.css?v=8">
+    <link rel="stylesheet" crossorigin href="./assets/index-CVHLiWwd.css?v=10">
   </head>
   <body>
     <div id="root"></div>
