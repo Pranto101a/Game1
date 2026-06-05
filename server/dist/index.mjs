@@ -187,6 +187,7 @@ function initGame(configs, online, cardCountsOverride, tokensToWinOverride) {
   let deck = shuffle(createDeck(cardCounts), numPlayers);
   // draw hidden card randomly too (so the top-of-deck order doesn't dominate perceived patterns)
   let drawHistory = [];
+  let hiddenCard;
   ({ deck, card: hiddenCard, history: drawHistory } = drawFromDeckRandom(deck, drawHistory, numPlayers));
   const tokensOverride = sanitizeTokensToWinOverride(tokensToWinOverride);
   const players = configs.map((cfg, i) => {
@@ -882,70 +883,93 @@ io.on("connection", (socket) => {
     }
   });
   socket.on("join_room", ({ roomId, playerName }) => {
-    const room = joinRoom(roomId, socket.id, playerName);
-    if (!room) {
-      socket.emit("error", "\u09B0\u09C1\u09AE \u09AA\u09BE\u0993\u09AF\u09BC\u09BE \u09AF\u09BE\u09AF\u09BC\u09A8\u09BF \u0985\u09A5\u09AC\u09BE \u09AA\u09C2\u09B0\u09CD\u09A3 \u09B9\u09AF\u09BC\u09C7 \u0997\u09C7\u099B\u09C7");
-      return;
+    try {
+      const room = joinRoom(roomId, socket.id, playerName);
+      if (!room) {
+        socket.emit("error", "\u09B0\u09C1\u09AE \u09AA\u09BE\u0993\u09AF\u09BC\u09BE \u09AF\u09BE\u09AF\u09BC\u09A8\u09BF \u0985\u09A5\u09AC\u09BE \u09AA\u09C2\u09B0\u09CD\u09A3 \u09B9\u09AF\u09BC\u09C7 \u0997\u09C7\u099B\u09C7");
+        return;
+      }
+      const playerId = room.players.find((p) => p.socketId === socket.id)?.playerId ?? -1;
+      socket.join(roomId);
+      socket.emit("room_joined", { roomId, playerId });
+      io.to(roomId).emit("lobby_update", { players: getPlayerNames(room) });
+    } catch (e) {
+      console.error(e);
+      socket.emit("error", "\u09B0\u09C1\u09AE\u09C7 \u09AF\u09CB\u0997 \u09A6\u09BF\u09A4\u09C7 \u09AC\u09CD\u09AF\u09B0\u09CD\u09A5 \u09B9\u09AF\u09BC\u09C7\u099B\u09C7");
     }
-    const playerId = room.players.find((p) => p.socketId === socket.id)?.playerId ?? -1;
-    socket.join(roomId);
-    socket.emit("room_joined", { roomId, playerId });
-    io.to(roomId).emit("lobby_update", { players: getPlayerNames(room) });
   });
   socket.on("rejoin_room", ({ roomId, playerId, playerName }) => {
-    const room = rejoinRoom(roomId, playerId, socket.id, playerName);
-    if (!room) {
-      socket.emit("error", "\u09B0\u09C1\u09AE \u09AA\u09BE\u0993\u09AF\u09BC\u09BE \u09AF\u09BE\u09AF\u09BC\u09A8\u09BF");
-      return;
-    }
-    socket.join(roomId);
-    if (room.phase === "lobby") {
-      io.to(roomId).emit("lobby_update", { players: getPlayerNames(room) });
-    } else if (room.gameState) {
-      const st = room.gameState;
-      if (st?.phase === "playing" && st?.playStep === "peek_result" && st.currentPlayerIndex !== playerId) {
-        socket.emit("game_state", { state: redactPeekForOthers(st) });
-      } else {
-        socket.emit("game_state", { state: st });
+    try {
+      const pid = typeof playerId === "number" ? playerId : Number.parseInt(String(playerId), 10);
+      const room = rejoinRoom(roomId, Number.isFinite(pid) ? pid : playerId, socket.id, playerName);
+      if (!room) {
+        socket.emit("error", "\u09B0\u09C1\u09AE \u09AA\u09BE\u0993\u09AF\u09BC\u09BE \u09AF\u09BE\u09AF\u09BC\u09A8\u09BF");
+        return;
       }
+      socket.join(roomId);
+      if (room.phase === "lobby") {
+        io.to(roomId).emit("lobby_update", { players: getPlayerNames(room) });
+      } else if (room.gameState) {
+        const st = room.gameState;
+        if (st?.phase === "playing" && st?.playStep === "peek_result" && st.currentPlayerIndex !== pid) {
+          socket.emit("game_state", { state: redactPeekForOthers(st) });
+        } else {
+          socket.emit("game_state", { state: st });
+        }
+      }
+    } catch (e) {
+      console.error(e);
+      socket.emit("error", "\u09B0\u09C1\u09AE \u09AB\u09BF\u09B0\u09C7 \u09AA\u09C7\u09A4\u09C7 \u09AC\u09CD\u09AF\u09B0\u09CD\u09A5 \u09B9\u09AF\u09BC\u09C7\u099B\u09C7");
     }
   });
   socket.on("start_game", ({ roomId, playerId, cardCounts, tokensToWinOverride }) => {
-    const room = getRoom(roomId);
-    if (!room) {
-      socket.emit("error", "\u09B0\u09C1\u09AE \u09AA\u09BE\u0993\u09AF\u09BC\u09BE \u09AF\u09BE\u09AF\u09BC\u09A8\u09BF");
-      return;
-    }
-    if (playerId !== 0) {
-      socket.emit("error", "\u09B6\u09C1\u09A7\u09C1 \u09B9\u09CB\u09B8\u09CD\u099F \u0996\u09C7\u09B2\u09BE \u09B6\u09C1\u09B0\u09C1 \u0995\u09B0\u09A4\u09C7 \u09AA\u09BE\u09B0\u09C7\u09A8");
-      return;
-    }
-    if (room.players.length < 2) {
-      socket.emit("error", "\u0995\u09AE\u09AA\u0995\u09CD\u09B7\u09C7 \u09E8 \u099C\u09A8 \u0996\u09C7\u09B2\u09CB\u09AF\u09BC\u09BE\u09A1\u09BC \u09AA\u09CD\u09B0\u09AF\u09BC\u09CB\u099C\u09A8");
-      return;
-    }
-    const override = sanitizeCardCountsOverride(cardCounts);
-    room.cardCountsOverride = override;
-    const tokOverride = sanitizeTokensToWinOverride(tokensToWinOverride);
-    room.tokensToWinOverride = tokOverride;
-    const state = startGame(roomId, override, tokOverride);
-    if (!state) {
+    try {
+      const pid = typeof playerId === "number" ? playerId : Number.parseInt(String(playerId), 10);
+      const room = getRoom(roomId);
+      if (!room) {
+        socket.emit("error", "\u09B0\u09C1\u09AE \u09AA\u09BE\u0993\u09AF\u09BC\u09BE \u09AF\u09BE\u09AF\u09BC\u09A8\u09BF");
+        return;
+      }
+      if (pid !== 0) {
+        socket.emit("error", "\u09B6\u09C1\u09A7\u09C1 \u09B9\u09CB\u09B8\u09CD\u099F \u0996\u09C7\u09B2\u09BE \u09B6\u09C1\u09B0\u09C1 \u0995\u09B0\u09A4\u09C7 \u09AA\u09BE\u09B0\u09C7\u09A8");
+        return;
+      }
+      if (room.players.length < 2) {
+        socket.emit("error", "\u0995\u09AE\u09AA\u0995\u09CD\u09B7\u09C7 \u09E8 \u099C\u09A8 \u0996\u09C7\u09B2\u09CB\u09AF\u09BC\u09BE\u09A1\u09BC \u09AA\u09CD\u09B0\u09AF\u09BC\u09CB\u099C\u09A8");
+        return;
+      }
+      const override = sanitizeCardCountsOverride(cardCounts);
+      room.cardCountsOverride = override;
+      const tokOverride = sanitizeTokensToWinOverride(tokensToWinOverride);
+      room.tokensToWinOverride = tokOverride;
+      const state = startGame(roomId, override, tokOverride);
+      if (!state) {
+        socket.emit("error", "\u0996\u09C7\u09B2\u09BE \u09B6\u09C1\u09B0\u09C1 \u0995\u09B0\u09A4\u09C7 \u09AC\u09CD\u09AF\u09B0\u09CD\u09A5 \u09B9\u09AF\u09BC\u09C7\u099B\u09C7");
+        return;
+      }
+      emitState(io, roomId, "game_state", state);
+      scheduleAutoAcknowledge(io, roomId);
+      scheduleAutoNextRound(io, roomId);
+    } catch (e) {
+      console.error(e);
       socket.emit("error", "\u0996\u09C7\u09B2\u09BE \u09B6\u09C1\u09B0\u09C1 \u0995\u09B0\u09A4\u09C7 \u09AC\u09CD\u09AF\u09B0\u09CD\u09A5 \u09B9\u09AF\u09BC\u09C7\u099B\u09C7");
-      return;
     }
-    emitState(io, roomId, "game_state", state);
-    scheduleAutoAcknowledge(io, roomId);
-    scheduleAutoNextRound(io, roomId);
   });
   socket.on("game_action", ({ roomId, playerId, ...actionData }) => {
-    const state = applyAction(roomId, playerId, actionData);
-    if (!state) {
+    try {
+      const pid = typeof playerId === "number" ? playerId : Number.parseInt(String(playerId), 10);
+      const state = applyAction(roomId, Number.isFinite(pid) ? pid : playerId, actionData);
+      if (!state) {
+        socket.emit("error", "\u0985\u09AC\u09C8\u09A7 \u09AA\u09A6\u0995\u09CD\u09B7\u09C7\u09AA");
+        return;
+      }
+      emitState(io, roomId, "game_action_ack", state);
+      scheduleAutoAcknowledge(io, roomId);
+      scheduleAutoNextRound(io, roomId);
+    } catch (e) {
+      console.error(e);
       socket.emit("error", "\u0985\u09AC\u09C8\u09A7 \u09AA\u09A6\u0995\u09CD\u09B7\u09C7\u09AA");
-      return;
     }
-    emitState(io, roomId, "game_action_ack", state);
-    scheduleAutoAcknowledge(io, roomId);
-    scheduleAutoNextRound(io, roomId);
   });
 });
 httpServer.listen(port, () => {
