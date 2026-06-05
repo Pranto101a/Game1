@@ -90,6 +90,14 @@ function createDeck(cardCounts = DEFAULT_CARD_COUNTS) {
 function getTokensToWin(n) {
   return { 2: 7, 3: 5, 4: 4, 5: 3, 6: 3 }[n] ?? 3;
 }
+
+function sanitizeTokensToWinOverride(v) {
+  const n = v == null ? NaN : typeof v === "number" ? v : Number.parseInt(String(v), 10);
+  if (!Number.isFinite(n)) return null;
+  const t = Math.trunc(n);
+  if (t < 3 || t > 10) return null;
+  return t;
+}
 function mustPlayCaptain(hand) {
   return hand.includes("captain") && (hand.includes("cannon") || hand.includes("sailor"));
 }
@@ -102,11 +110,12 @@ function addLog(state, msg) {
 function hasMultipleHumans(players) {
   return players.filter((p) => p.isHuman).length > 1;
 }
-function initGame(configs, online, cardCountsOverride) {
+function initGame(configs, online, cardCountsOverride, tokensToWinOverride) {
   const numPlayers = configs.length;
   const cardCounts = { ...DEFAULT_CARD_COUNTS, ...sanitizeCardCountsOverride(cardCountsOverride) };
   const deck = shuffle(createDeck(cardCounts));
   const hiddenCard = deck.pop();
+  const tokensOverride = sanitizeTokensToWinOverride(tokensToWinOverride);
   const players = configs.map((cfg, i) => ({
     id: i,
     name: cfg.name,
@@ -136,7 +145,8 @@ function initGame(configs, online, cardCountsOverride) {
     peekCard: null,
     resultMessage: "",
     round: 1,
-    tokensToWin: getTokensToWin(numPlayers),
+    tokensToWin: tokensOverride ?? getTokensToWin(numPlayers),
+    tokensToWinOverride: tokensOverride,
     log: [`\u09B0\u09BE\u0989\u09A8\u09CD\u09A1 \u09E7 \u09B6\u09C1\u09B0\u09C1!`],
     isOnline: online ?? false
   };
@@ -606,7 +616,8 @@ function createRoom(socketId, playerName) {
     players: [{ socketId, name: playerName, playerId: 0 }],
     gameState: null,
     phase: "lobby",
-    cardCountsOverride: null
+    cardCountsOverride: null,
+    tokensToWinOverride: null
   };
   rooms.set(roomId, room);
   return room;
@@ -650,14 +661,14 @@ function runAiIfNeeded(state) {
   }
   return s;
 }
-function startGame(roomId, cardCountsOverride) {
+function startGame(roomId, cardCountsOverride, tokensToWinOverride) {
   const room = rooms.get(roomId);
   if (!room || room.players.length < 2) return null;
   const configs = room.players.map((p) => ({
     name: p.name,
     isHuman: true
   }));
-  let state = initGame(configs, true, cardCountsOverride);
+  let state = initGame(configs, true, cardCountsOverride, tokensToWinOverride);
   state = beginTurn(state);
   state = runAiIfNeeded(state);
   room.gameState = state;
@@ -805,7 +816,7 @@ io.on("connection", (socket) => {
       }
     }
   });
-  socket.on("start_game", ({ roomId, playerId, cardCounts }) => {
+  socket.on("start_game", ({ roomId, playerId, cardCounts, tokensToWinOverride }) => {
     const room = getRoom(roomId);
     if (!room) {
       socket.emit("error", "\u09B0\u09C1\u09AE \u09AA\u09BE\u0993\u09AF\u09BC\u09BE \u09AF\u09BE\u09AF\u09BC\u09A8\u09BF");
@@ -821,7 +832,9 @@ io.on("connection", (socket) => {
     }
     const override = sanitizeCardCountsOverride(cardCounts);
     room.cardCountsOverride = override;
-    const state = startGame(roomId, override);
+    const tokOverride = sanitizeTokensToWinOverride(tokensToWinOverride);
+    room.tokensToWinOverride = tokOverride;
+    const state = startGame(roomId, override, tokOverride);
     if (!state) {
       socket.emit("error", "\u0996\u09C7\u09B2\u09BE \u09B6\u09C1\u09B0\u09C1 \u0995\u09B0\u09A4\u09C7 \u09AC\u09CD\u09AF\u09B0\u09CD\u09A5 \u09B9\u09AF\u09BC\u09C7\u099B\u09C7");
       return;
