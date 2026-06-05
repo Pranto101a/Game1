@@ -2,9 +2,6 @@
 import { createServer } from "node:http";
 import { Server as SocketIOServer } from "socket.io";
 import { randomInt as cryptoRandomInt } from "node:crypto";
-import { readFile, stat } from "node:fs/promises";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
 
 function randInt(maxExclusive) {
   if (maxExclusive <= 0) return 0;
@@ -98,10 +95,10 @@ function deckBadScore(a, numPlayers) {
 function shuffle(arr, numPlayers) {
   // Crypto-based randomness. Additionally, avoid repeating the exact same initial deal
   // as the previous game/round (to reduce perceived "patterns").
-  for (let attempt = 0; attempt < 8; attempt++) {
+  for (let attempt = 0; attempt < 4; attempt++) {
     let a = [...arr];
     // Extra mixing + random "cut" to reduce perceived patterns when starting games repeatedly.
-    for (let pass = 0; pass < 8; pass++) {
+    for (let pass = 0; pass < 6; pass++) {
       for (let i = a.length - 1; i > 0; i--) {
         const j = randInt(i + 1);
         [a[i], a[j]] = [a[j], a[i]];
@@ -114,7 +111,7 @@ function shuffle(arr, numPlayers) {
       a = a.slice(cut2).concat(a.slice(0, cut2));
     }
     const bad = deckBadScore(a, numPlayers);
-    if (!bad || attempt === 7) {
+    if (!bad || attempt === 3) {
       try {
         __LAST_DEAL_SIG = dealSigFromDeck(a, numPlayers) || __LAST_DEAL_SIG;
       } catch {
@@ -123,21 +120,6 @@ function shuffle(arr, numPlayers) {
     }
   }
   return [...arr];
-}
-
-// Shuffle ONLY the remaining deck (do not re-introduce discards).
-// Used before each draw to reduce perceived patterns.
-function shuffleRemainingDeck(arr) {
-  let a = [...arr];
-  for (let i = a.length - 1; i > 0; i--) {
-    const j = randInt(i + 1);
-    [a[i], a[j]] = [a[j], a[i]];
-  }
-  if (a.length > 1) {
-    const cut = randInt(a.length);
-    a = a.slice(cut).concat(a.slice(0, cut));
-  }
-  return a;
 }
 function createDeck(cardCounts = DEFAULT_CARD_COUNTS) {
   const deck = [];
@@ -258,8 +240,6 @@ function beginTurn(state) {
     return checkRoundEnd({ ...state, players });
   }
   let deck = [...state.deck];
-  // Per-turn shuffle (remaining deck only)
-  deck = shuffleRemainingDeck(deck);
   let drawHistory = state.drawHistory ?? [];
   let drawn;
   ({ deck, card: drawn, history: drawHistory } = drawFromDeckRandom(deck, drawHistory, players.length));
@@ -694,105 +674,6 @@ var rooms = /* @__PURE__ */ new Map();
 var autoAckTimers = /* @__PURE__ */ new Map();
 var autoRoundTimers = /* @__PURE__ */ new Map();
 
-function findRoomBySocketId(socketId) {
-  for (const room of rooms.values()) {
-    const p = room.players.find((x) => x.socketId === socketId);
-    if (p) return { room, player: p };
-  }
-  return null;
-}
-
-function closeRoom(io2, roomId, reason = "room_closed") {
-  const room = rooms.get(roomId);
-  if (!room) return;
-  try {
-    io2.to(roomId).emit("room_closed", { roomId, reason });
-  } catch {
-  }
-  rooms.delete(roomId);
-  clearAutoAckTimer(roomId);
-  clearAutoRoundTimer(roomId);
-}
-
-const __distDir = path.dirname(fileURLToPath(import.meta.url));
-const __publicDir = path.join(__distDir, "..", "public");
-
-const MIME = {
-  ".html": "text/html; charset=utf-8",
-  ".js": "text/javascript; charset=utf-8",
-  ".mjs": "text/javascript; charset=utf-8",
-  ".css": "text/css; charset=utf-8",
-  ".json": "application/json; charset=utf-8",
-  ".svg": "image/svg+xml",
-  ".png": "image/png",
-  ".jpg": "image/jpeg",
-  ".jpeg": "image/jpeg",
-  ".webp": "image/webp",
-  ".txt": "text/plain; charset=utf-8",
-  ".ico": "image/x-icon",
-  ".webmanifest": "application/manifest+json; charset=utf-8"
-};
-
-async function serveStatic(req, res) {
-  try {
-    if (!req.url || (req.method !== "GET" && req.method !== "HEAD")) return false;
-
-    // Let Socket.IO handle its own HTTP polling requests
-    if (req.url.startsWith("/api/socket.io")) return false;
-
-    const u = new URL(req.url, "http://localhost");
-    let pathname = decodeURIComponent(u.pathname || "/");
-    if (!pathname.startsWith("/")) pathname = `/${pathname}`;
-
-    // Prevent path traversal
-    const safePath = path
-      .normalize(pathname)
-      .replace(/^(\.\.(\/|\\|$))+/, "")
-      .replace(/^\/+/, "");
-
-    let filePath = path.join(__publicDir, safePath);
-    if (pathname === "/" || pathname.endsWith("/")) {
-      filePath = path.join(__publicDir, safePath, "index.html");
-    }
-
-    let st;
-    try {
-      st = await stat(filePath);
-    } catch {
-      // SPA fallback: serve index.html for non-asset routes
-      const ext = path.extname(filePath);
-      if (!ext) {
-        try {
-          filePath = path.join(__publicDir, "index.html");
-          st = await stat(filePath);
-        } catch {
-          return false;
-        }
-      } else {
-        return false;
-      }
-    }
-
-    if (!st?.isFile()) return false;
-    const ext = path.extname(filePath).toLowerCase();
-    res.writeHead(200, { "content-type": MIME[ext] || "application/octet-stream" });
-    if (req.method === "HEAD") {
-      res.end();
-      return true;
-    }
-    const buf = await readFile(filePath);
-    res.end(buf);
-    return true;
-  } catch {
-    try {
-      res.writeHead(500, { "content-type": "text/plain; charset=utf-8" });
-      res.end("Internal Server Error");
-    } catch {
-    }
-    return true;
-  }
-}
-
 function redactPeekForOthers(state) {
   try {
     const attacker = state.players[state.currentPlayerIndex];
@@ -983,14 +864,8 @@ var httpServer = createServer((req, res) => {
     res.end(JSON.stringify({ status: "ok" }));
     return;
   }
-  serveStatic(req, res).then((handled) => {
-    if (handled) return;
-    res.writeHead(200, { "content-type": "text/plain; charset=utf-8" });
-    res.end("Jolodosshu multiplayer server is running.");
-  }).catch(() => {
-    res.writeHead(500, { "content-type": "text/plain; charset=utf-8" });
-    res.end("Internal Server Error");
-  });
+  res.writeHead(200, { "content-type": "text/plain" });
+  res.end("Jolodosshu multiplayer server is running.");
 });
 var io = new SocketIOServer(httpServer, {
   path: "/api/socket.io",
@@ -1000,8 +875,6 @@ io.on("connection", (socket) => {
   socket.on("create_room", ({ playerName }) => {
     try {
       const room = createRoom(socket.id, playerName);
-      socket.data.roomId = room.id;
-      socket.data.playerId = 0;
       socket.join(room.id);
       socket.emit("room_created", { roomId: room.id, playerId: 0 });
       io.to(room.id).emit("lobby_update", { players: getPlayerNames(room) });
@@ -1017,8 +890,6 @@ io.on("connection", (socket) => {
         return;
       }
       const playerId = room.players.find((p) => p.socketId === socket.id)?.playerId ?? -1;
-      socket.data.roomId = roomId;
-      socket.data.playerId = playerId;
       socket.join(roomId);
       socket.emit("room_joined", { roomId, playerId });
       io.to(roomId).emit("lobby_update", { players: getPlayerNames(room) });
@@ -1035,8 +906,6 @@ io.on("connection", (socket) => {
         socket.emit("error", "\u09B0\u09C1\u09AE \u09AA\u09BE\u0993\u09AF\u09BC\u09BE \u09AF\u09BE\u09AF\u09BC\u09A8\u09BF");
         return;
       }
-      socket.data.roomId = roomId;
-      socket.data.playerId = pid;
       socket.join(roomId);
       if (room.phase === "lobby") {
         io.to(roomId).emit("lobby_update", { players: getPlayerNames(room) });
@@ -1051,28 +920,6 @@ io.on("connection", (socket) => {
     } catch (e) {
       console.error(e);
       socket.emit("error", "\u09B0\u09C1\u09AE \u09AB\u09BF\u09B0\u09C7 \u09AA\u09C7\u09A4\u09C7 \u09AC\u09CD\u09AF\u09B0\u09CD\u09A5 \u09B9\u09AF\u09BC\u09C7\u099B\u09C7");
-    }
-  });
-  socket.on("disconnect", () => {
-    try {
-      const roomId = socket.data?.roomId;
-      const pid = socket.data?.playerId;
-      if (roomId && pid === 0) {
-        // Host disconnected: close the room and kick everyone.
-        closeRoom(io, roomId, "host_disconnected");
-        return;
-      }
-      // Non-host: remove from lobby list (best-effort)
-      const found = findRoomBySocketId(socket.id);
-      if (!found) return;
-      const { room, player } = found;
-      if (player.playerId === 0) {
-        closeRoom(io, room.id, "host_disconnected");
-        return;
-      }
-      room.players = room.players.filter((p) => p.socketId !== socket.id);
-      io.to(room.id).emit("lobby_update", { players: getPlayerNames(room) });
-    } catch {
     }
   });
   socket.on("start_game", ({ roomId, playerId, cardCounts, tokensToWinOverride }) => {
