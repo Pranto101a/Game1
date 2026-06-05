@@ -68,6 +68,42 @@
       };
       window.__jdSetCardCounts(window.__jdGetCardCounts());
 
+      // --- Tokens-to-win override (3-10) ---
+      // If not set, the default rule will be used (based on number of players).
+      const __JD_TOKENS_KEY = "jd_tokens_to_win_override";
+      window.__jdGetTokensToWinOverride = function () {
+        try {
+          const raw = localStorage.getItem(__JD_TOKENS_KEY);
+          if (!raw) return null;
+          const n = Math.trunc(Number(raw));
+          if (!Number.isFinite(n)) return null;
+          if (n < 3 || n > 10) return null;
+          return n;
+        } catch {
+          return null;
+        }
+      };
+      window.__jdSetTokensToWinOverride = function (v) {
+        try {
+          const n = v == null ? null : Math.trunc(Number(v));
+          if (n == null) {
+            localStorage.removeItem(__JD_TOKENS_KEY);
+            window.__jd_tokens_to_win_override = null;
+            return null;
+          }
+          if (!Number.isFinite(n) || n < 3 || n > 10) {
+            localStorage.removeItem(__JD_TOKENS_KEY);
+            window.__jd_tokens_to_win_override = null;
+            return null;
+          }
+          window.__jd_tokens_to_win_override = n;
+          localStorage.setItem(__JD_TOKENS_KEY, String(n));
+          return n;
+        } catch {
+          return null;
+        }
+      };
+
       const entryUrl = new URL("./assets/index-Er7WoFSS.js?v=17", import.meta.url);
       const res = await fetch(entryUrl);
       let code = await res.text();
@@ -78,6 +114,7 @@
       (function setupCardCountControls() {
         const GUARD_OPTIONS = [1, 2, 3, 4, 5, 6];
         const MERCHANT_OPTIONS = [1, 2];
+        const TOKEN_OPTIONS = [3, 4, 5, 6, 7, 8, 9, 10];
 
         function getCounts() {
           try {
@@ -97,6 +134,21 @@
             localStorage.setItem("jd_card_counts", JSON.stringify(next));
           } catch {}
           return next;
+        }
+
+        function getTokensOverride() {
+          try {
+            const v = window.__jdGetTokensToWinOverride ? window.__jdGetTokensToWinOverride() : null;
+            return TOKEN_OPTIONS.includes(v) ? v : null;
+          } catch {
+            return null;
+          }
+        }
+        function setTokensOverride(v) {
+          try {
+            if (window.__jdSetTokensToWinOverride) return window.__jdSetTokensToWinOverride(v);
+          } catch {}
+          return null;
         }
 
         function makeOptionButtons({ options, selected, onSelect }) {
@@ -124,6 +176,7 @@
           if (root.querySelector(`#${id}`)) return;
 
           const c = getCounts();
+          const tok = getTokensOverride();
 
           const container = document.createElement("div");
           container.id = id;
@@ -151,17 +204,26 @@
           merchantLabel.className = "block text-base text-foreground mb-2 font-black";
           merchantLabel.textContent = "বণিক (১–২)";
 
+          const tokensLabel = document.createElement("label");
+          tokensLabel.className = "block text-base text-foreground mb-2 font-black";
+          tokensLabel.textContent = "কত টোকেন পর্যন্ত খেলবেন? (৩–১০)";
+
           const guardWrap = document.createElement("div");
           guardWrap.className = "mb-4";
           const merchantWrap = document.createElement("div");
           merchantWrap.className = "mb-1";
+          const tokensWrap = document.createElement("div");
+          tokensWrap.className = "mb-1";
 
           function render() {
             const cur = getCounts();
+            const curTok = getTokensOverride(); // null => default rule
             guardWrap.innerHTML = "";
             merchantWrap.innerHTML = "";
+            tokensWrap.innerHTML = "";
             guardWrap.appendChild(guardLabel);
             merchantWrap.appendChild(merchantLabel);
+            tokensWrap.appendChild(tokensLabel);
 
             const guardBtns = makeOptionButtons({
               options: GUARD_OPTIONS,
@@ -182,15 +244,28 @@
               }
             });
 
+            const tokenBtns = makeOptionButtons({
+              options: ["ডিফল্ট", ...TOKEN_OPTIONS],
+              selected: curTok == null ? "ডিফল্ট" : curTok,
+              onSelect: (v) => {
+                if (!isHost) return;
+                setTokensOverride(v === "ডিফল্ট" ? null : v);
+                render();
+              }
+            });
+
             if (!isHost) {
               guardBtns.style.opacity = "0.5";
               merchBtns.style.opacity = "0.5";
+              tokenBtns.style.opacity = "0.5";
               guardBtns.style.pointerEvents = "none";
               merchBtns.style.pointerEvents = "none";
+              tokenBtns.style.pointerEvents = "none";
             }
 
             guardWrap.appendChild(guardBtns);
             merchantWrap.appendChild(merchBtns);
+            tokensWrap.appendChild(tokenBtns);
           }
 
           render();
@@ -198,6 +273,7 @@
           container.appendChild(title);
           container.appendChild(guardWrap);
           container.appendChild(merchantWrap);
+          container.appendChild(tokensWrap);
 
           if (mode === "online" && !isHost) {
             const note = document.createElement("p");
@@ -300,6 +376,12 @@
         'function iw(){const e=[];const o=typeof window!=="undefined"&&window.__jdGetCardCounts?window.__jdGetCardCounts():{};const u={...Jh,guard:o.guard??Jh.guard,merchant:o.merchant??Jh.merchant};for(const[n,i]of Object.entries(u))for(let r=0;r<i;r++)e.push(n);return e}';
       if (code.includes(oldIw)) code = code.replace(oldIw, newIw);
 
+      // Tokens-to-win override (3-10). If not selected, keep default rule (based on player count).
+      const oldKj = 'function Kj(e){return{2:7,3:5,4:4,5:3,6:3}[e]??3}';
+      const newKj =
+        'function Kj(e){const n=typeof window!=="undefined"&&window.__jdGetTokensToWinOverride?window.__jdGetTokensToWinOverride():null;return n??({2:7,3:5,4:4,5:3,6:3}[e]??3)}';
+      if (code.includes(oldKj)) code = code.replace(oldKj, newKj);
+
       const oldOfflineStart =
         'x.jsx("button",{onClick:b,className:"w-full py-3 rounded-xl bg-primary text-primary-foreground font-bold text-lg hover:bg-accent transition-all hover:scale-[1.02] active:scale-[0.98] shadow-lg",children:"⚓ খেলা শুরু করুন"})';
       const newOfflineStart =
@@ -308,17 +390,17 @@
 
       const oldStartGameFn = 'function O(){Jt(),R("start_game")}';
       const newStartGameFn =
-        'function O(){Jt();if(c===0){try{const next=window.__jdGetCardCounts?window.__jdGetCardCounts():{guard:6,merchant:2};window.__jdSetCardCounts&&window.__jdSetCardCounts(next);R("start_game",{cardCounts:next});return}catch(e){}}R("start_game")}';
+        'function O(){Jt();if(c===0){try{const next=window.__jdGetCardCounts?window.__jdGetCardCounts():{guard:6,merchant:2};const tok=window.__jdGetTokensToWinOverride?window.__jdGetTokensToWinOverride():null;window.__jdSetCardCounts&&window.__jdSetCardCounts(next);R("start_game",{cardCounts:next,tokensToWinOverride:tok});return}catch(e){}}R("start_game")}';
       if (code.includes(oldStartGameFn)) code = code.replace(oldStartGameFn, newStartGameFn);
 
       const oldOnGameState = 'Y.on("game_state",({state:ne})=>{i(ne),y("playing"),E(null)})';
       const newOnGameState =
-        'Y.on("game_state",({state:ne})=>{try{ne&&ne.cardCounts&&window.__jdSetCardCounts&&window.__jdSetCardCounts(ne.cardCounts)}catch(e){}i(ne),y("playing"),E(null)})';
+        'Y.on("game_state",({state:ne})=>{try{ne&&ne.cardCounts&&window.__jdSetCardCounts&&window.__jdSetCardCounts(ne.cardCounts)}catch(e){}try{ne&&("tokensToWinOverride"in ne)&&window.__jdSetTokensToWinOverride&&window.__jdSetTokensToWinOverride(ne.tokensToWinOverride)}catch(e){}i(ne),y("playing"),E(null)})';
       if (code.includes(oldOnGameState)) code = code.replace(oldOnGameState, newOnGameState);
 
       const oldOnAck = 'Y.on("game_action_ack",({state:ne})=>{i(ne),E(null)})';
       const newOnAck =
-        'Y.on("game_action_ack",({state:ne})=>{try{ne&&ne.cardCounts&&window.__jdSetCardCounts&&window.__jdSetCardCounts(ne.cardCounts)}catch(e){}i(ne),E(null)})';
+        'Y.on("game_action_ack",({state:ne})=>{try{ne&&ne.cardCounts&&window.__jdSetCardCounts&&window.__jdSetCardCounts(ne.cardCounts)}catch(e){}try{ne&&("tokensToWinOverride"in ne)&&window.__jdSetTokensToWinOverride&&window.__jdSetTokensToWinOverride(ne.tokensToWinOverride)}catch(e){}i(ne),E(null)})';
       if (code.includes(oldOnAck)) code = code.replace(oldOnAck, newOnAck);
 
       // 6) Offline: round end screen should only show "পরবর্তী রাউন্ড" (no "নতুন খেলা")
