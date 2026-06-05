@@ -40,11 +40,21 @@
     -->
     <script type="module">
       // --- Card count override (only Guard + Merchant) ---
-      // Stored in localStorage so offline/online can reuse the last selection.
+      // NOTE: We store in sessionStorage (NOT localStorage) so it won't stay saved after leaving/reopening.
       const __JD_DEFAULT_COUNTS = { guard: 6, merchant: 2 };
+      function __jdStorage() {
+        try {
+          return sessionStorage;
+        } catch {
+          return null;
+        }
+      }
       window.__jdGetCardCounts = function () {
         try {
-          const raw = localStorage.getItem("jd_card_counts");
+          // Clear legacy persistence (older builds used localStorage)
+          try { localStorage.removeItem("jd_card_counts"); } catch {}
+          const store = __jdStorage();
+          const raw = store ? store.getItem("jd_card_counts") : null;
           if (!raw) return { ...__JD_DEFAULT_COUNTS };
           const v = JSON.parse(raw);
           const g = Number.isFinite(+v.guard) ? Math.max(0, Math.min(20, Math.trunc(+v.guard))) : __JD_DEFAULT_COUNTS.guard;
@@ -60,7 +70,10 @@
           const m = Number.isFinite(+counts?.merchant) ? Math.max(0, Math.min(20, Math.trunc(+counts.merchant))) : __JD_DEFAULT_COUNTS.merchant;
           const out = { guard: g, merchant: m };
           window.__jd_card_counts = out;
-          localStorage.setItem("jd_card_counts", JSON.stringify(out));
+          // Clear legacy persistence + store only for this tab session
+          try { localStorage.removeItem("jd_card_counts"); } catch {}
+          const store = __jdStorage();
+          try { store && store.setItem("jd_card_counts", JSON.stringify(out)); } catch {}
           return out;
         } catch {
           return { ...__JD_DEFAULT_COUNTS };
@@ -73,7 +86,10 @@
       const __JD_TOKENS_KEY = "jd_tokens_to_win_override";
       window.__jdGetTokensToWinOverride = function () {
         try {
-          const raw = localStorage.getItem(__JD_TOKENS_KEY);
+          // Clear legacy persistence (older builds used localStorage)
+          try { localStorage.removeItem(__JD_TOKENS_KEY); } catch {}
+          const store = __jdStorage();
+          const raw = store ? store.getItem(__JD_TOKENS_KEY) : null;
           if (!raw) return null;
           const n = Math.trunc(Number(raw));
           if (!Number.isFinite(n)) return null;
@@ -87,21 +103,34 @@
         try {
           const n = v == null ? null : Math.trunc(Number(v));
           if (n == null) {
-            localStorage.removeItem(__JD_TOKENS_KEY);
+            try { localStorage.removeItem(__JD_TOKENS_KEY); } catch {}
+            const store = __jdStorage();
+            try { store && store.removeItem(__JD_TOKENS_KEY); } catch {}
             window.__jd_tokens_to_win_override = null;
             return null;
           }
           if (!Number.isFinite(n) || n < 3 || n > 10) {
-            localStorage.removeItem(__JD_TOKENS_KEY);
+            try { localStorage.removeItem(__JD_TOKENS_KEY); } catch {}
+            const store = __jdStorage();
+            try { store && store.removeItem(__JD_TOKENS_KEY); } catch {}
             window.__jd_tokens_to_win_override = null;
             return null;
           }
           window.__jd_tokens_to_win_override = n;
-          localStorage.setItem(__JD_TOKENS_KEY, String(n));
+          // Clear legacy persistence + store only for this tab session
+          try { localStorage.removeItem(__JD_TOKENS_KEY); } catch {}
+          const store = __jdStorage();
+          try { store && store.setItem(__JD_TOKENS_KEY, String(n)); } catch {}
           return n;
         } catch {
           return null;
         }
+      };
+
+      // Reset সব অপশন (পাহারাদার/বণিক/টোকেন) — যাতে গেম শেষ/বের হলে আবার ডিফল্টে ফিরে আসে
+      window.__jdResetGameOptions = function () {
+        try { window.__jdSetCardCounts && window.__jdSetCardCounts(__JD_DEFAULT_COUNTS); } catch {}
+        try { window.__jdSetTokensToWinOverride && window.__jdSetTokensToWinOverride(null); } catch {}
       };
 
       const entryUrl = new URL("./assets/index-Er7WoFSS.js?v=17", import.meta.url);
@@ -110,7 +139,7 @@
 
       // --- UI controls for Guard/Merchant counts (offline start + online lobby) ---
       // We inject a tiny DOM-based UI so we don't need to rebuild the bundled app.
-      // Values are stored in localStorage via __jdSetCardCounts and used by both offline+online.
+      // Values are stored in sessionStorage via __jdSetCardCounts (auto-reset).
       (function setupCardCountControls() {
         const GUARD_OPTIONS = [1, 2, 3, 4, 5, 6];
         const MERCHANT_OPTIONS = [1, 2];
@@ -131,7 +160,8 @@
             if (window.__jdSetCardCounts) return window.__jdSetCardCounts(next);
           } catch {}
           try {
-            localStorage.setItem("jd_card_counts", JSON.stringify(next));
+            const store = __jdStorage();
+            store && store.setItem("jd_card_counts", JSON.stringify(next));
           } catch {}
           return next;
         }
@@ -304,6 +334,11 @@
           if (!h2) return;
           const card = h2.closest(".bg-card") || h2.closest("div");
           if (!card) return;
+          // Each time we come back to this screen, reset options to default
+          if (!card.dataset.jdOptionsReset) {
+            card.dataset.jdOptionsReset = "1";
+            try { window.__jdResetGameOptions && window.__jdResetGameOptions(); } catch {}
+          }
           mountControls({ root: card, mode: "offline" });
         }
 
@@ -312,13 +347,39 @@
           if (!h2) return;
           const card = h2.closest(".bg-card") || h2.closest("div");
           if (!card) return;
+          // Each time we come back to lobby, reset options to default
+          if (!card.dataset.jdOptionsReset) {
+            card.dataset.jdOptionsReset = "1";
+            try { window.__jdResetGameOptions && window.__jdResetGameOptions(); } catch {}
+          }
           mountControls({ root: card, mode: "online" });
+        }
+
+        // Also reset when user exits or restarts from end screens
+        function hookResetButtons() {
+          const resetTexts = ["বেরিয়ে যাও", "বেরিয়ে যান", "রিস্টার্ট দা ম্যাচ", "নতুন খেলা"];
+          const btns = Array.from(document.querySelectorAll("button"));
+          for (const b of btns) {
+            const t = (b.textContent || "").trim();
+            if (!t) continue;
+            if (!resetTexts.some((s) => t.includes(s))) continue;
+            if (b.dataset.jdResetHooked) continue;
+            b.dataset.jdResetHooked = "1";
+            b.addEventListener(
+              "click",
+              () => {
+                try { window.__jdResetGameOptions && window.__jdResetGameOptions(); } catch {}
+              },
+              { capture: true }
+            );
+          }
         }
 
         function ensureAll() {
           try {
             ensureOffline();
             ensureOnlineLobby();
+            hookResetButtons();
           } catch {}
         }
 
@@ -392,6 +453,13 @@
       const newStartGameFn =
         'function O(){Jt();if(c===0){try{const next=window.__jdGetCardCounts?window.__jdGetCardCounts():{guard:6,merchant:2};const tok=window.__jdGetTokensToWinOverride?window.__jdGetTokensToWinOverride():null;window.__jdSetCardCounts&&window.__jdSetCardCounts(next);R("start_game",{cardCounts:next,tokensToWinOverride:tok});return}catch(e){}}R("start_game")}';
       if (code.includes(oldStartGameFn)) code = code.replace(oldStartGameFn, newStartGameFn);
+
+      // Offline: fix player count bug (human list array may contain extra names, but game should start with (totalPlayers - botCount) humans only)
+      const oldOfflinePlayersFn =
+        'function b(){Jt();const w=["Blackbeard","Redbeard","Ironhook","Bluecoat","Silversail"],E=[...c.map((A,R)=>({name:A||`খেলোয়াড় ${R+1}`,isHuman:!0})),...Array.from({length:r},(A,R)=>({name:w[R]??`Bot ${R+1}`,isHuman:!1}))];sessionStorage.setItem("jd_players",JSON.stringify(E)),e("/game")}';
+      const newOfflinePlayersFn =
+        'function b(){Jt();const w=["Blackbeard","Redbeard","Ironhook","Bluecoat","Silversail"],E=[...c.slice(0,p).map((A,R)=>({name:A||`খেলোয়াড় ${R+1}`,isHuman:!0})),...Array.from({length:r},(A,R)=>({name:w[R]??`Bot ${R+1}`,isHuman:!1}))];sessionStorage.setItem("jd_players",JSON.stringify(E)),e("/game")}';
+      if (code.includes(oldOfflinePlayersFn)) code = code.replace(oldOfflinePlayersFn, newOfflinePlayersFn);
 
       const oldOnGameState = 'Y.on("game_state",({state:ne})=>{i(ne),y("playing"),E(null)})';
       const newOnGameState =
