@@ -474,7 +474,7 @@
       const oldBeginTurnDraw =
         'const r=[...e.deck],l=r.pop();i=i.map((h,m)=>m===n?{...h,hand:[...h.hand,l]}:h);';
       const newBeginTurnDraw =
-        'let r=[...e.deck],dh=e.drawHistory??[];r=em(r);let l;{let tries=Math.min(12,r.length),pick=r.length-1;for(let t=0;t<tries;t++){const idx=__secureRandInt(r.length),card=r[idx],L=dh.length;const bad=(L>=1&&card===dh[L-1])||(L>=3&&dh[L-3]===dh[L-1]&&card===dh[L-2]);if(!bad||t===tries-1){pick=idx;break}}l=r.splice(pick,1)[0];dh=[...dh.slice(-20),l]}i=i.map((h,m)=>m===n?{...h,hand:[...h.hand,l]}:h);';
+        'let r=[...e.deck],dh=e.drawHistory??[];let l;{let tries=Math.min(12,r.length),pick=r.length-1;for(let t=0;t<tries;t++){const idx=__secureRandInt(r.length),card=r[idx],L=dh.length;const bad=(L>=1&&card===dh[L-1])||(L>=3&&dh[L-3]===dh[L-1]&&card===dh[L-2]);if(!bad||t===tries-1){pick=idx;break}}l=r.splice(pick,1)[0];dh=[...dh.slice(-20),l]}i=i.map((h,m)=>m===n?{...h,hand:[...h.hand,l]}:h);';
       if (code.includes(oldBeginTurnDraw)) code = code.replace(oldBeginTurnDraw, newBeginTurnDraw);
 
       const oldBeginTurnReturn =
@@ -540,12 +540,6 @@
         'Y.on("game_action_ack",({state:ne})=>{try{ne&&ne.cardCounts&&window.__jdSetCardCounts&&window.__jdSetCardCounts(ne.cardCounts)}catch(e){}try{ne&&("tokensToWinOverride"in ne)&&window.__jdSetTokensToWinOverride&&window.__jdSetTokensToWinOverride(ne.tokensToWinOverride)}catch(e){}i(ne),E(null)})';
       if (code.includes(oldOnAck)) code = code.replace(oldOnAck, newOnAck);
 
-      // Room closed by host: kick everyone out cleanly
-      const oldOnDisconnect = 'Y.on("error",ne=>{b(`ত্রুটি: ${ne}`)}),Y.on("disconnect",()=>b("সংযোগ বিচ্ছিন্ন হয়েছে")),()=>{Y.disconnect()}';
-      const newOnDisconnect =
-        'Y.on("error",ne=>{b(`ত্রুটি: ${ne}`)}),Y.on("room_closed",()=>{try{b("রুম বন্ধ করা হয়েছে");sessionStorage.removeItem("jd_online_room");sessionStorage.removeItem("jd_online_player_id");sessionStorage.removeItem("jd_online_name");e("/")}catch(e){}}),Y.on("disconnect",()=>b("সংযোগ বিচ্ছিন্ন হয়েছে")),()=>{Y.disconnect()}';
-      if (code.includes(oldOnDisconnect)) code = code.replace(oldOnDisconnect, newOnDisconnect);
-
       // 6) Offline: round end screen should only show "পরবর্তী রাউন্ড" (no "নতুন খেলা")
       const oldRoundEndBtns =
         'x.jsxs("div",{className:"flex gap-3",children:[x.jsx("button",{onClick:k,className:"px-6 py-2 rounded-xl bg-primary text-primary-foreground font-bold hover:bg-accent",children:"পরবর্তী রাউন্ড"}),x.jsx("button",{onClick:V,className:"px-6 py-2 rounded-xl bg-secondary text-secondary-foreground font-bold border border-border",children:"নতুন খেলা"})]})]';
@@ -564,7 +558,7 @@
       const oldOnlineGameEnd =
         'n.phase==="game_end"&&x.jsxs(He.div,{initial:{opacity:0,scale:.9},animate:{opacity:1,scale:1},className:"flex flex-col items-center gap-4 text-center py-4",children:[x.jsx("div",{className:"text-5xl",children:"🏆"}),x.jsx("h2",{className:"text-xl font-bold text-primary",children:n.resultMessage}),x.jsx("button",{onClick:L,className:"px-6 py-2 rounded-xl bg-primary text-primary-foreground font-bold hover:bg-accent",children:"বেরিয়ে যান"})]},"game-end"';
       const newOnlineGameEnd =
-        'n.phase==="game_end"&&x.jsxs(He.div,{initial:{opacity:0,scale:.9},animate:{opacity:1,scale:1},className:"flex flex-col items-center gap-4 text-center py-4",children:[x.jsx("div",{className:"text-5xl animate-bounce drop-shadow-[0_0_25px_rgba(255,215,0,0.45)]",children:"🏆"}),x.jsx("h2",{className:"text-xl font-black text-primary",children:n.resultMessage}),x.jsx("div",{className:"w-full max-w-xs bg-card/60 border border-primary/30 rounded-2xl p-4 shadow-xl",children:n.players.slice().sort((a,b)=>b.tokens-a.tokens).map(p=>x.jsxs("div",{className:"flex items-center justify-between py-1",children:[x.jsx("span",{className:"text-sm font-bold text-foreground truncate",children:p.name}),x.jsxs("span",{className:"text-sm font-black text-primary",children:["🪙 ",p.tokens]})]},p.id))}),x.jsxs("div",{className:"flex gap-3",children:[c===0?x.jsx("button",{onClick:O,className:"px-6 py-2 rounded-xl bg-primary text-primary-foreground font-bold hover:bg-accent",children:"রিস্টার্ট দ্যা ম্যাচ"}):x.jsx("button",{disabled:!0,className:"px-6 py-2 rounded-xl bg-secondary text-secondary-foreground font-bold border border-border opacity-60 cursor-not-allowed",children:"হোস্ট রিস্টার্ট করবে"}),x.jsx("button",{onClick:L,className:"px-6 py-2 rounded-xl bg-secondary text-secondary-foreground font-bold border border-border hover:bg-secondary/80",children:"বেরিয়ে যাও"})]})]},"game-end"';
+        'n.phase==="game_end"&&x.jsxs(He.div,{initial:{opacity:0,scale:.9},animate:{opacity:1,scale:1},className:"flex flex-col items-center gap-4 text-center py-4",children:[x.jsx("div",{className:"text-5xl animate-bounce drop-shadow-[0_0_25px_rgba(255,215,0,0.45)]",children:"🏆"}),x.jsx("h2",{className:"text-xl font-black text-primary",children:n.resultMessage}),x.jsx("div",{className:"w-full max-w-xs bg-card/60 border border-primary/30 rounded-2xl p-4 shadow-xl",children:n.players.slice().sort((a,b)=>b.tokens-a.tokens).map(p=>x.jsxs("div",{className:"flex items-center justify-between py-1",children:[x.jsx("span",{className:"text-sm font-bold text-foreground truncate",children:p.name}),x.jsxs("span",{className:"text-sm font-black text-primary",children:["🪙 ",p.tokens]})]},p.id))}),x.jsxs("div",{className:"flex gap-3",children:[x.jsx("button",{onClick:()=>{try{sessionStorage.removeItem("jd_online_room");sessionStorage.removeItem("jd_online_player_id");e("/lobby")}catch(e){}},className:"px-6 py-2 rounded-xl bg-primary text-primary-foreground font-bold hover:bg-accent",children:"রিস্টার্ট দা ম্যাচ"}),x.jsx("button",{onClick:L,className:"px-6 py-2 rounded-xl bg-secondary text-secondary-foreground font-bold border border-border hover:bg-secondary/80",children:"বেরিয়ে যাও"})]})]},"game-end"';
       if (code.includes(oldOnlineGameEnd)) code = code.replace(oldOnlineGameEnd, newOnlineGameEnd);
 
       // 9) Card tracker: use selected counts for Guard/Merchant (dot count + "x/x বাকি")
