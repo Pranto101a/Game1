@@ -65,34 +65,36 @@ var CARD_NAMES_BN = {
   captain: "\u0995\u09CD\u09AF\u09BE\u09AA\u09CD\u099F\u09C7\u09A8",
   pirate: "\u099C\u09B2\u09A6\u09B8\u09CD\u09AF\u09C1"
 };
+var __LAST_DEAL_SIG = "";
+function dealSigFromDeck(a, numPlayers) {
+  try {
+    // Signature of the initial deal:
+    // [first player's draw, all players' first cards (reverse pop order), hidden card]
+    // These are the last (numPlayers + 2) cards in the shuffled deck.
+    const take = numPlayers + 2;
+    if (a.length < take) return "";
+    return a.slice(a.length - take).join(",");
+  } catch {
+    return "";
+  }
+}
 function deckBadScore(a, numPlayers) {
   try {
     if (!numPlayers || numPlayers < 2) return 0;
-    const init = a.slice(-(numPlayers + 1));
-    let score = 0;
-    const hasPirate = init.includes("pirate");
-    const hasSwordsman = init.includes("swordsman");
-    if (hasPirate && hasSwordsman) score += 3;
-    let merchants = 0;
-    for (const c of init) if (c === "merchant") merchants++;
-    if (merchants >= 2) score += 2;
-    const look = Math.min(a.length, numPlayers + 10);
-    const order = a.slice(-look).slice().reverse(); // draw order (pop)
-    for (let i = 0; i < order.length - 1; i++) {
-      const x = order[i], y = order[i + 1];
-      if (x === "merchant" && y === "merchant") score += 2;
-      if (x === "pirate" && y === "swordsman") score += 2;
-      if (x === "swordsman" && y === "pirate") score += 2;
+    try {
+      const sig = dealSigFromDeck(a, numPlayers);
+      if (sig && __LAST_DEAL_SIG && sig === __LAST_DEAL_SIG) return 1;
+    } catch {
     }
-    return score;
+    return 0;
   } catch {
     return 0;
   }
 }
 
 function shuffle(arr, numPlayers) {
-  // We still use crypto-based randomness, but we also do a light "anti-pattern" retry
-  // to reduce the chance of getting the same-feeling combos at the start.
+  // Crypto-based randomness. Additionally, avoid repeating the exact same initial deal
+  // as the previous game/round (to reduce perceived "patterns").
   for (let attempt = 0; attempt < 4; attempt++) {
     let a = [...arr];
     // Extra mixing + random "cut" to reduce perceived patterns when starting games repeatedly.
@@ -108,8 +110,14 @@ function shuffle(arr, numPlayers) {
       const cut2 = randInt(a.length);
       a = a.slice(cut2).concat(a.slice(0, cut2));
     }
-    const score = deckBadScore(a, numPlayers);
-    if (score === 0 || attempt === 3) return a;
+    const bad = deckBadScore(a, numPlayers);
+    if (!bad || attempt === 3) {
+      try {
+        __LAST_DEAL_SIG = dealSigFromDeck(a, numPlayers) || __LAST_DEAL_SIG;
+      } catch {
+      }
+      return a;
+    }
   }
   return [...arr];
 }
@@ -119,6 +127,36 @@ function createDeck(cardCounts = DEFAULT_CARD_COUNTS) {
     for (let i = 0; i < count; i++) deck.push(id);
   }
   return deck;
+}
+
+function drawFromDeckRandom(deck, history, numPlayers) {
+  // Draw a random card from deck without replacement.
+  // Also try to reduce very repetitive perceived patterns like ABAB or AA.
+  // This does NOT prevent any specific combo; it only avoids repeating the same local pattern too often.
+  const h = Array.isArray(history) ? history.slice(-20) : [];
+  const d = [...deck];
+  const tries = Math.min(12, d.length);
+  const bad = (card) => {
+    const n = h.length;
+    if (n >= 1 && card === h[n - 1]) return true; // avoid immediate repeat: A A
+    // avoid alternating repeat: A B A B (detect A B A and forbid B)
+    if (n >= 3 && h[n - 3] === h[n - 1] && card === h[n - 2]) return true;
+    // If there are multiple humans/bots, allow a bit more variety by also limiting "same last 2" repeats:
+    // X Y X Y style already handled; keep it minimal.
+    return false;
+  };
+  let pickIdx = d.length - 1;
+  for (let t = 0; t < tries; t++) {
+    const idx = randInt(d.length);
+    const card = d[idx];
+    if (!bad(card) || t === tries - 1) {
+      pickIdx = idx;
+      break;
+    }
+  }
+  const [card] = d.splice(pickIdx, 1);
+  const nextHistory = [...h, card];
+  return { deck: d, card, history: nextHistory };
 }
 function getTokensToWin(n) {
   return { 2: 7, 3: 5, 4: 4, 5: 3, 6: 3 }[n] ?? 3;
@@ -146,20 +184,26 @@ function hasMultipleHumans(players) {
 function initGame(configs, online, cardCountsOverride, tokensToWinOverride) {
   const numPlayers = configs.length;
   const cardCounts = { ...DEFAULT_CARD_COUNTS, ...sanitizeCardCountsOverride(cardCountsOverride) };
-  const deck = shuffle(createDeck(cardCounts), numPlayers);
-  const hiddenCard = deck.pop();
+  let deck = shuffle(createDeck(cardCounts), numPlayers);
+  // draw hidden card randomly too (so the top-of-deck order doesn't dominate perceived patterns)
+  let drawHistory = [];
+  ({ deck, card: hiddenCard, history: drawHistory } = drawFromDeckRandom(deck, drawHistory, numPlayers));
   const tokensOverride = sanitizeTokensToWinOverride(tokensToWinOverride);
-  const players = configs.map((cfg, i) => ({
-    id: i,
-    name: cfg.name,
-    isHuman: cfg.isHuman,
-    hand: [deck.pop()],
-    discardPile: [],
-    tokens: 0,
-    isEliminated: false,
-    isProtected: false,
-    playedThiefThisRound: false
-  }));
+  const players = configs.map((cfg, i) => {
+    let card;
+    ({ deck, card, history: drawHistory } = drawFromDeckRandom(deck, drawHistory, numPlayers));
+    return {
+      id: i,
+      name: cfg.name,
+      isHuman: cfg.isHuman,
+      hand: [card],
+      discardPile: [],
+      tokens: 0,
+      isEliminated: false,
+      isProtected: false,
+      playedThiefThisRound: false
+    };
+  });
   const firstIsHuman = players[0].isHuman;
   const multiHuman = hasMultipleHumans(players);
   const usePassDevice = firstIsHuman && multiHuman && !online;
@@ -180,6 +224,7 @@ function initGame(configs, online, cardCountsOverride, tokensToWinOverride) {
     round: 1,
     tokensToWin: tokensOverride ?? getTokensToWin(numPlayers),
     tokensToWinOverride: tokensOverride,
+    drawHistory,
     log: [`\u09B0\u09BE\u0989\u09A8\u09CD\u09A1 \u09E7 \u09B6\u09C1\u09B0\u09C1!`],
     isOnline: online ?? false
   };
@@ -193,8 +238,10 @@ function beginTurn(state) {
   if (state.deck.length === 0) {
     return checkRoundEnd({ ...state, players });
   }
-  const deck = [...state.deck];
-  const drawn = deck.pop();
+  let deck = [...state.deck];
+  let drawHistory = state.drawHistory ?? [];
+  let drawn;
+  ({ deck, card: drawn, history: drawHistory } = drawFromDeckRandom(deck, drawHistory, players.length));
   players = players.map(
     (p, i) => i === idx ? { ...p, hand: [...p.hand, drawn] } : p
   );
@@ -205,6 +252,7 @@ function beginTurn(state) {
       ...state,
       deck,
       players,
+      drawHistory,
       cardBeingPlayed: null,
       targetPlayerIndex: null,
       guessedCardId: null,
@@ -239,6 +287,11 @@ function eliminatePlayer(players, idx, discardedCard) {
 }
 function playCard(state, cardIndex) {
   const player = state.players[state.currentPlayerIndex];
+  // Captain rule: if Captain + (Cannon or Sailor) is in hand, player MUST play Captain.
+  // Enforce on server too (otherwise clients can bypass).
+  if (mustPlayCaptain(player.hand) && player.hand[cardIndex] !== "captain") {
+    throw new Error("must_play_captain");
+  }
   const cardId = player.hand[cardIndex];
   const newHand = player.hand.filter((_, i) => i !== cardIndex);
   let players = state.players.map(
@@ -526,16 +579,23 @@ function endRound(state, winnerId) {
   return { ...s, phase: "round_end" };
 }
 function startNewRound(state, firstPlayerIdx) {
-  const deck = shuffle(createDeck(state.cardCounts ?? DEFAULT_CARD_COUNTS), state.players.length);
-  const hiddenCard = deck.pop();
-  const players = state.players.map((p) => ({
-    ...p,
-    isEliminated: false,
-    isProtected: false,
-    hand: [deck.pop()],
-    discardPile: [],
-    playedThiefThisRound: false
-  }));
+  const numPlayers = state.players.length;
+  let deck = shuffle(createDeck(state.cardCounts ?? DEFAULT_CARD_COUNTS), numPlayers);
+  let drawHistory = state.drawHistory ?? [];
+  let hiddenCard;
+  ({ deck, card: hiddenCard, history: drawHistory } = drawFromDeckRandom(deck, drawHistory, numPlayers));
+  const players = state.players.map((p) => {
+    let card;
+    ({ deck, card, history: drawHistory } = drawFromDeckRandom(deck, drawHistory, numPlayers));
+    return {
+      ...p,
+      isEliminated: false,
+      isProtected: false,
+      hand: [card],
+      discardPile: [],
+      playedThiefThisRound: false
+    };
+  });
   const firstPlayer = players[firstPlayerIdx];
   const multiHuman = hasMultipleHumans(players);
   const step = firstPlayer.isHuman && multiHuman && !state.isOnline ? "pass_device" : "start_turn";
@@ -547,6 +607,7 @@ function startNewRound(state, firstPlayerIdx) {
     players,
     deck,
     hiddenCard,
+    drawHistory,
     currentPlayerIndex: firstPlayerIdx,
     cardBeingPlayed: null,
     targetPlayerIndex: null,
