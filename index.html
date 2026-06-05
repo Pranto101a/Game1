@@ -68,7 +68,7 @@
       };
       window.__jdSetCardCounts(window.__jdGetCardCounts());
 
-      const entryUrl = new URL("./assets/index-Er7WoFSS.js?v=12", import.meta.url);
+      const entryUrl = new URL("./assets/index-Er7WoFSS.js?v=13", import.meta.url);
       const res = await fetch(entryUrl);
       let code = await res.text();
 
@@ -107,7 +107,7 @@
             btn.type = "button";
             const isSel = v === selected;
             btn.className =
-              "w-10 h-10 rounded-lg font-bold transition-all " +
+              "w-12 h-12 rounded-xl font-black text-lg transition-all " +
               (isSel
                 ? "bg-primary text-primary-foreground"
                 : "bg-secondary text-secondary-foreground hover:bg-secondary/80");
@@ -127,11 +127,11 @@
 
           const container = document.createElement("div");
           container.id = id;
-          container.className = "mb-4";
+          container.className = "mb-4 p-4 rounded-2xl bg-card/40 border border-border shadow";
 
           const title = document.createElement("p");
-          title.className = "text-xs text-muted-foreground mb-2 font-bold";
-          title.textContent = mode === "offline" ? "কার্ড সেটিংস (অফলাইন)" : "কার্ড সেটিংস (অনলাইন)";
+          title.className = "text-sm text-muted-foreground mb-3 font-black tracking-wide";
+          title.textContent = mode === "offline" ? "কার্ড সেটিংস" : "কার্ড সেটিংস (অনলাইন)";
 
           // Host-only for online lobby
           let isHost = true;
@@ -144,12 +144,12 @@
           }
 
           const guardLabel = document.createElement("label");
-          guardLabel.className = "block text-sm text-muted-foreground mb-2";
-          guardLabel.textContent = "পাহারাদার";
+          guardLabel.className = "block text-base text-foreground mb-2 font-black";
+          guardLabel.textContent = "পাহারাদার (১–৬)";
 
           const merchantLabel = document.createElement("label");
-          merchantLabel.className = "block text-sm text-muted-foreground mb-2";
-          merchantLabel.textContent = "বণিক";
+          merchantLabel.className = "block text-base text-foreground mb-2 font-black";
+          merchantLabel.textContent = "বণিক (১–২)";
 
           const guardWrap = document.createElement("div");
           guardWrap.className = "mb-4";
@@ -201,17 +201,21 @@
 
           if (mode === "online" && !isHost) {
             const note = document.createElement("p");
-            note.className = "text-xs text-muted-foreground mt-2";
+            note.className = "text-xs text-muted-foreground mt-3 font-bold";
             note.textContent = "শুধু হোস্ট এই সেটিংস পরিবর্তন করতে পারবেন।";
             container.appendChild(note);
           }
 
-          // Insert just before the main action button of that card
-          const actionBtn = Array.from(root.querySelectorAll("button")).find((b) =>
-            b.textContent?.includes("খেলা শুরু করুন")
-          );
-          if (actionBtn && actionBtn.parentElement) {
-            actionBtn.parentElement.insertBefore(container, actionBtn);
+          // Insert:
+          // - Offline: before "খেলা শুরু করুন" button
+          // - Online lobby: before "বেরিয়ে যান" button (so exit stays at the bottom)
+          const btnTextIncludes = (b, s) => (b?.textContent || "").includes(s);
+          const insertBeforeBtn =
+            mode === "online"
+              ? Array.from(root.querySelectorAll("button")).find((b) => btnTextIncludes(b, "বেরিয়ে যান"))
+              : Array.from(root.querySelectorAll("button")).find((b) => btnTextIncludes(b, "খেলা শুরু করুন"));
+          if (insertBeforeBtn && insertBeforeBtn.parentElement) {
+            insertBeforeBtn.parentElement.insertBefore(container, insertBeforeBtn);
           } else {
             root.appendChild(container);
           }
@@ -356,7 +360,7 @@
         URL.revokeObjectURL(blobUrl);
       }
     </script>
-    <link rel="stylesheet" crossorigin href="./assets/index-CVHLiWwd.css?v=12">
+    <link rel="stylesheet" crossorigin href="./assets/index-CVHLiWwd.css?v=13">
   </head>
   <body>
     <div id="root"></div>
