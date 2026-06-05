@@ -357,7 +357,8 @@
 
         // Also reset when user exits or restarts from end screens
         function hookResetButtons() {
-          const resetTexts = ["বেরিয়ে যাও", "বেরিয়ে যান", "রিস্টার্ট দা ম্যাচ", "নতুন খেলা"];
+          // Reset only when leaving/starting fresh, NOT when restarting the same match.
+          const resetTexts = ["বেরিয়ে যাও", "বেরিয়ে যান", "নতুন খেলা"];
           const btns = Array.from(document.querySelectorAll("button"));
           for (const b of btns) {
             const t = (b.textContent || "").trim();
@@ -431,6 +432,11 @@
       // - Offline: after player select (start button click)
       // - Online: host selects when starting the room
       // - Only Guard (পাহারাদার) + Merchant (বণিক) are configurable; everything else stays default
+      // Also increase petty_thief (ছিচকে চোর) card count from 1 -> 2 (offline + tracker)
+      const oldJh = 'const Jh={petty_thief:1,guard:6,ship_worker:2,swordsman:2,cannon:2,merchant:2,sailor:1,captain:1,spy:2,pirate:1}';
+      const newJh = 'const Jh={petty_thief:2,guard:6,ship_worker:2,swordsman:2,cannon:2,merchant:2,sailor:1,captain:1,spy:2,pirate:1}';
+      if (code.includes(oldJh)) code = code.replace(oldJh, newJh);
+
       const oldIw =
         'function iw(){const e=[];for(const[n,i]of Object.entries(Jh))for(let r=0;r<i;r++)e.push(n);return e}';
       const newIw =
