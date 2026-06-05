@@ -15,7 +15,7 @@ function randInt(maxExclusive) {
 
 // ../pirate-card-game/lib/game-engine/src/game-logic.ts
 var DEFAULT_CARD_COUNTS = {
-  petty_thief: 1,
+  petty_thief: 2,
   guard: 6,
   ship_worker: 2,
   swordsman: 2,
