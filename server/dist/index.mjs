@@ -388,7 +388,11 @@ function merchantSelect(state, keepIndex) {
   return { ...s, playStep: "show_result" };
 }
 function aiSelectTarget(state, validTargets) {
-  const targetIdx = validTargets[randInt(validTargets.length)];
+  const targetIdx = validTargets.reduce((best, cur) => {
+    const bt = state.players[best]?.tokens ?? 0;
+    const ct = state.players[cur]?.tokens ?? 0;
+    return ct > bt ? cur : best;
+  }, validTargets[0]);
   const s = { ...state, targetPlayerIndex: targetIdx };
   if (state.cardBeingPlayed === "guard") {
     return aiGuardGuess(s, targetIdx);
@@ -397,7 +401,22 @@ function aiSelectTarget(state, validTargets) {
 }
 function aiGuardGuess(state, targetIdx) {
   const guessable = ["ship_worker", "swordsman", "cannon", "merchant", "sailor", "captain", "spy", "pirate", "petty_thief"];
-  const guess = guessable[randInt(guessable.length)];
+  const used = {};
+  for (const p of state.players) for (const d of p.discardPile) used[d] = (used[d] ?? 0) + 1;
+  const counts = state.cardCounts ?? DEFAULT_CARD_COUNTS;
+  let bestLeft = -1;
+  let candidates = [];
+  for (const id of guessable) {
+    const left = (counts[id] ?? 0) - (used[id] ?? 0);
+    if (left > bestLeft) {
+      bestLeft = left;
+      candidates = [id];
+    } else if (left === bestLeft) {
+      candidates.push(id);
+    }
+  }
+  const pickFrom = candidates.length ? candidates : guessable;
+  const guess = pickFrom[randInt(pickFrom.length)];
   return resolveGuard({ ...state, targetPlayerIndex: targetIdx }, guess);
 }
 function acknowledgeResult(state) {
@@ -519,6 +538,13 @@ function aiTakeTurn(state) {
   for (const cardId of PLAY_PRIORITY) {
     const idx = hand.indexOf(cardId);
     if (idx === -1) continue;
+    // Smarter swordsman: only play if our remaining card is reasonably strong.
+    // Otherwise it's often suicidal (you'll lose the compare).
+    if (cardId === "swordsman" && hand.length === 2) {
+      const other = hand[idx === 0 ? 1 : 0];
+      const otherVal = other ? CARD_VALUES[other] : -1;
+      if (otherVal <= 3) continue;
+    }
     if (TARGET_CARDS.includes(cardId)) {
       const targets = getValidTargets(state, cardId);
       if (targets.length > 0) return playCard(state, idx);
@@ -542,6 +568,31 @@ function aiTakeTurn(state) {
 var rooms = /* @__PURE__ */ new Map();
 var autoAckTimers = /* @__PURE__ */ new Map();
 var autoRoundTimers = /* @__PURE__ */ new Map();
+
+function redactPeekForOthers(state) {
+  try {
+    const attacker = state.players[state.currentPlayerIndex];
+    const target = state.players[state.targetPlayerIndex ?? -1];
+    const msg = target ? `${attacker.name} ${target.name}-এর কার্ড দেখেছে।` : `${attacker.name} কার্ড দেখেছে।`;
+    return { ...state, peekCard: null, resultMessage: msg, playStep: "show_result" };
+  } catch {
+    return { ...state, peekCard: null, resultMessage: "", playStep: "show_result" };
+  }
+}
+
+function emitState(io2, roomId, eventName, state) {
+  const room = getRoom(roomId);
+  if (!room) return;
+  // Ship worker peek should be private (only the player who played sees the card)
+  if (state?.phase === "playing" && state?.playStep === "peek_result") {
+    for (const p of room.players) {
+      const payloadState = p.playerId === state.currentPlayerIndex ? state : redactPeekForOthers(state);
+      io2.to(p.socketId).emit(eventName, { state: payloadState });
+    }
+    return;
+  }
+  io2.to(roomId).emit(eventName, { state });
+}
 function generateRoomId() {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
   let id = "";
@@ -669,8 +720,9 @@ function scheduleAutoAcknowledge(io2, roomId) {
     if (cur.playStep !== expectedStep) return;
     const nextState = applyAction(roomId, expectedPlayerId, { action: "acknowledge" });
     if (!nextState) return;
-    io2.to(roomId).emit("game_action_ack", { state: nextState });
+    emitState(io2, roomId, "game_action_ack", nextState);
     scheduleAutoAcknowledge(io2, roomId);
+    scheduleAutoNextRound(io2, roomId);
   }, 5e3);
   autoAckTimers.set(roomId, t);
 }
@@ -694,7 +746,7 @@ function scheduleAutoNextRound(io2, roomId) {
     let nextState = startNewRound(cur, firstPlayerId);
     nextState = runAiIfNeeded(nextState);
     r2.gameState = nextState;
-    io2.to(roomId).emit("game_action_ack", { state: nextState });
+    emitState(io2, roomId, "game_action_ack", nextState);
     scheduleAutoAcknowledge(io2, roomId);
   }, 5e3);
   autoRoundTimers.set(roomId, t);
@@ -745,7 +797,12 @@ io.on("connection", (socket) => {
     if (room.phase === "lobby") {
       io.to(roomId).emit("lobby_update", { players: getPlayerNames(room) });
     } else if (room.gameState) {
-      socket.emit("game_state", { state: room.gameState });
+      const st = room.gameState;
+      if (st?.phase === "playing" && st?.playStep === "peek_result" && st.currentPlayerIndex !== playerId) {
+        socket.emit("game_state", { state: redactPeekForOthers(st) });
+      } else {
+        socket.emit("game_state", { state: st });
+      }
     }
   });
   socket.on("start_game", ({ roomId, playerId, cardCounts }) => {
@@ -769,7 +826,7 @@ io.on("connection", (socket) => {
       socket.emit("error", "\u0996\u09C7\u09B2\u09BE \u09B6\u09C1\u09B0\u09C1 \u0995\u09B0\u09A4\u09C7 \u09AC\u09CD\u09AF\u09B0\u09CD\u09A5 \u09B9\u09AF\u09BC\u09C7\u099B\u09C7");
       return;
     }
-    io.to(roomId).emit("game_state", { state });
+    emitState(io, roomId, "game_state", state);
     scheduleAutoAcknowledge(io, roomId);
     scheduleAutoNextRound(io, roomId);
   });
@@ -779,7 +836,7 @@ io.on("connection", (socket) => {
       socket.emit("error", "\u0985\u09AC\u09C8\u09A7 \u09AA\u09A6\u0995\u09CD\u09B7\u09C7\u09AA");
       return;
     }
-    io.to(roomId).emit("game_action_ack", { state });
+    emitState(io, roomId, "game_action_ack", state);
     scheduleAutoAcknowledge(io, roomId);
     scheduleAutoNextRound(io, roomId);
   });
