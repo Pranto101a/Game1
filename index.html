@@ -565,8 +565,16 @@
       const oldRoomClosedHandler =
         'Y.on("error",ne=>{b(`ত্রুটি: ${ne}`)}),Y.on("disconnect",()=>b("সংযোগ বিচ্ছিন্ন হয়েছে")),()=>{Y.disconnect()}';
       const newRoomClosedHandler =
-        'Y.on("error",ne=>{b(`ত্রুটি: ${ne}`)}),Y.on("room_closed",()=>{try{sessionStorage.removeItem("jd_online_room");sessionStorage.removeItem("jd_online_player_id");sessionStorage.removeItem("jd_online_name")}catch(e){}try{e("/")}catch(e){}b("রুম বন্ধ হয়েছে")}),Y.on("disconnect",()=>b("সংযোগ বিচ্ছিন্ন হয়েছে")),()=>{Y.disconnect()}';
+        'Y.on("error",ne=>{try{const msg=String(ne||\"\");if(msg.includes(\"রুম পাওয়া যায়নি\")){try{sessionStorage.removeItem(\"jd_online_room\");sessionStorage.removeItem(\"jd_online_player_id\");sessionStorage.removeItem(\"jd_online_name\")}catch(e){}try{e(\"/lobby\")}catch(e){}b(\"রুম পাওয়া যায়নি — নতুন রুম করুন\");return}}catch(e){}b(`ত্রুটি: ${ne}`)}),Y.on("room_closed",()=>{try{sessionStorage.removeItem("jd_online_room");sessionStorage.removeItem("jd_online_player_id");sessionStorage.removeItem("jd_online_name")}catch(e){}try{e("/")}catch(e){}b("রুম বন্ধ হয়েছে")}),Y.on("disconnect",()=>b("সংযোগ বিচ্ছিন্ন হয়েছে")),()=>{Y.disconnect()}';
       if (code.includes(oldRoomClosedHandler)) code = code.replace(oldRoomClosedHandler, newRoomClosedHandler);
+
+      // 8c) Render/Railway এ একাধিক instance / non-sticky routing হলে polling থেকে request অন্য instance এ চলে যেতে পারে।
+      // তাই অনলাইন মোডে শুধুই websocket ব্যবহার করানো হলো।
+      try {
+        const oldT = 'transports:["websocket","polling"]';
+        const newT = 'transports:["websocket"]';
+        if (code.includes(oldT)) code = code.split(oldT).join(newT);
+      } catch {}
 
       // 9) Card tracker: use selected counts for Guard/Merchant (dot count + "x/x বাকি")
       const oldTrackerCounts1 = 'px.map(h=>{const m=Jh[h],p=f[h]??0,';
