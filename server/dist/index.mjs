@@ -141,6 +141,13 @@ function reshuffleRemainingDeck(deck) {
   }
   return a;
 }
+
+function drawAfterReshuffle(deck, history) {
+  const d = reshuffleRemainingDeck(deck);
+  const card = d.pop();
+  const h = Array.isArray(history) ? [...history.slice(-20), card] : [card];
+  return { deck: d, card, history: h };
+}
 function createDeck(cardCounts = DEFAULT_CARD_COUNTS) {
   const deck = [];
   for (const [id, count] of Object.entries(cardCounts)) {
@@ -208,13 +215,11 @@ function initGame(configs, online, cardCountsOverride, tokensToWinOverride) {
   // draw hidden card randomly too (so the top-of-deck order doesn't dominate perceived patterns)
   let drawHistory = [];
   let hiddenCard;
-  deck = reshuffleRemainingDeck(deck);
-  ({ deck, card: hiddenCard, history: drawHistory } = drawFromDeckRandom(deck, drawHistory, numPlayers));
+  ({ deck, card: hiddenCard, history: drawHistory } = drawAfterReshuffle(deck, drawHistory));
   const tokensOverride = sanitizeTokensToWinOverride(tokensToWinOverride);
   const players = configs.map((cfg, i) => {
     let card;
-    deck = reshuffleRemainingDeck(deck);
-    ({ deck, card, history: drawHistory } = drawFromDeckRandom(deck, drawHistory, numPlayers));
+    ({ deck, card, history: drawHistory } = drawAfterReshuffle(deck, drawHistory));
     return {
       id: i,
       name: cfg.name,
@@ -263,9 +268,8 @@ function beginTurn(state) {
   }
   let deck = [...state.deck];
   let drawHistory = state.drawHistory ?? [];
-  deck = reshuffleRemainingDeck(deck);
   let drawn;
-  ({ deck, card: drawn, history: drawHistory } = drawFromDeckRandom(deck, drawHistory, players.length));
+  ({ deck, card: drawn, history: drawHistory } = drawAfterReshuffle(deck, drawHistory));
   players = players.map(
     (p, i) => i === idx ? { ...p, hand: [...p.hand, drawn] } : p
   );
@@ -607,12 +611,10 @@ function startNewRound(state, firstPlayerIdx) {
   let deck = shuffle(createDeck(state.cardCounts ?? DEFAULT_CARD_COUNTS), numPlayers);
   let drawHistory = state.drawHistory ?? [];
   let hiddenCard;
-  deck = reshuffleRemainingDeck(deck);
-  ({ deck, card: hiddenCard, history: drawHistory } = drawFromDeckRandom(deck, drawHistory, numPlayers));
+  ({ deck, card: hiddenCard, history: drawHistory } = drawAfterReshuffle(deck, drawHistory));
   const players = state.players.map((p) => {
     let card;
-    deck = reshuffleRemainingDeck(deck);
-    ({ deck, card, history: drawHistory } = drawFromDeckRandom(deck, drawHistory, numPlayers));
+    ({ deck, card, history: drawHistory } = drawAfterReshuffle(deck, drawHistory));
     return {
       ...p,
       isEliminated: false,
