@@ -1,7 +1,7 @@
 // entry.ts
 import { createServer } from "node:http";
 import { Server as SocketIOServer } from "socket.io";
-import { randomInt as cryptoRandomInt } from "node:crypto";
+import { randomInt as cryptoRandomInt, randomBytes, createHash } from "node:crypto";
 
 function randInt(maxExclusive) {
   if (maxExclusive <= 0) return 0;
@@ -10,6 +10,43 @@ function randInt(maxExclusive) {
     return cryptoRandomInt(0, maxExclusive);
   } catch {
     return Math.floor(Math.random() * maxExclusive);
+  }
+}
+
+function sha256Hex(s) {
+  try {
+    return createHash("sha256").update(String(s)).digest("hex");
+  } catch {
+    return "";
+  }
+}
+
+function newProvablyFairRound() {
+  // Server-seed (secret until round/game ends). Clients get only commit hash during the round.
+  const seed = randomBytes(32).toString("hex");
+  const commit = sha256Hex(seed);
+  return { pfSeed: seed, pfCommit: commit, pfReveal: null, pfCounter: 0 };
+}
+
+function pfRandInt(seed, counter, maxExclusive) {
+  // Deterministic unbiased RNG from seed+counter (provably fair).
+  if (maxExclusive <= 0) return { n: 0, counter };
+  try {
+    const mod = 4294967296;
+    const limit = mod - mod % maxExclusive;
+    let c = counter;
+    for (let attempt = 0; attempt < 20; attempt++) {
+      const h = createHash("sha256").update(`${seed}:${c}`).digest();
+      c++;
+      const v = h.readUInt32BE(0);
+      if (v < limit) return { n: v % maxExclusive, counter: c };
+    }
+    // fallback (still deterministic)
+    const h = createHash("sha256").update(`${seed}:${counter}`).digest();
+    const v = h.readUInt32BE(0);
+    return { n: v % maxExclusive, counter: counter + 1 };
+  } catch {
+    return { n: randInt(maxExclusive), counter };
   }
 }
 
@@ -142,11 +179,37 @@ function reshuffleRemainingDeck(deck) {
   return a;
 }
 
-function drawAfterReshuffle(deck, history) {
-  const d = reshuffleRemainingDeck(deck);
+function reshuffleRemainingDeckPF(deck, state) {
+  // If pfSeed exists, reshuffle using deterministic PF RNG; otherwise use normal randomness.
+  if (!state?.pfSeed) return { deck: reshuffleRemainingDeck(deck), state };
+  let a = [...deck];
+  let counter = state.pfCounter ?? 0;
+  try {
+    for (let pass = 0; pass < 2; pass++) {
+      for (let i = a.length - 1; i > 0; i--) {
+        const r = pfRandInt(state.pfSeed, counter, i + 1);
+        counter = r.counter;
+        const j = r.n;
+        [a[i], a[j]] = [a[j], a[i]];
+      }
+    }
+    if (a.length > 1) {
+      const r = pfRandInt(state.pfSeed, counter, a.length);
+      counter = r.counter;
+      const cut = r.n;
+      a = a.slice(cut).concat(a.slice(0, cut));
+    }
+  } catch {
+  }
+  return { deck: a, state: { ...state, pfCounter: counter } };
+}
+
+function drawAfterReshuffle(deck, history, state) {
+  const out = reshuffleRemainingDeckPF(deck, state);
+  const d = out.deck;
   const card = d.pop();
   const h = Array.isArray(history) ? [...history.slice(-20), card] : [card];
-  return { deck: d, card, history: h };
+  return { deck: d, card, history: h, state: out.state };
 }
 function createDeck(cardCounts = DEFAULT_CARD_COUNTS) {
   const deck = [];
@@ -211,15 +274,26 @@ function hasMultipleHumans(players) {
 function initGame(configs, online, cardCountsOverride, tokensToWinOverride) {
   const numPlayers = configs.length;
   const cardCounts = { ...DEFAULT_CARD_COUNTS, ...sanitizeCardCountsOverride(cardCountsOverride) };
+  let baseState = { ...newProvablyFairRound() };
   let deck = shuffle(createDeck(cardCounts), numPlayers);
   // draw hidden card randomly too (so the top-of-deck order doesn't dominate perceived patterns)
   let drawHistory = [];
   let hiddenCard;
-  ({ deck, card: hiddenCard, history: drawHistory } = drawAfterReshuffle(deck, drawHistory));
+  ({
+    deck,
+    card: hiddenCard,
+    history: drawHistory,
+    state: baseState
+  } = drawAfterReshuffle(deck, drawHistory, baseState));
   const tokensOverride = sanitizeTokensToWinOverride(tokensToWinOverride);
   const players = configs.map((cfg, i) => {
     let card;
-    ({ deck, card, history: drawHistory } = drawAfterReshuffle(deck, drawHistory));
+    ({
+      deck,
+      card,
+      history: drawHistory,
+      state: baseState
+    } = drawAfterReshuffle(deck, drawHistory, baseState));
     return {
       id: i,
       name: cfg.name,
@@ -253,8 +327,12 @@ function initGame(configs, online, cardCountsOverride, tokensToWinOverride) {
     tokensToWin: tokensOverride ?? getTokensToWin(numPlayers),
     tokensToWinOverride: tokensOverride,
     drawHistory,
-    log: [`\u09B0\u09BE\u0989\u09A8\u09CD\u09A1 \u09E7 \u09B6\u09C1\u09B0\u09C1!`],
-    isOnline: online ?? false
+    log: [`\u09B0\u09BE\u0989\u09A8\u09CD\u09A1 \u09E7 \u09B6\u09C1\u09B0\u09C1!`, `\u09B6\u09BE\u09AB\u09B2 \u09B9\u09CD\u09AF\u09BE\u09B6: ${baseState.pfCommit.slice(0, 16)}`],
+    isOnline: online ?? false,
+    pfCommit: baseState.pfCommit,
+    pfReveal: null,
+    pfSeed: baseState.pfSeed,
+    pfCounter: baseState.pfCounter
   };
 }
 function beginTurn(state) {
@@ -269,7 +347,12 @@ function beginTurn(state) {
   let deck = [...state.deck];
   let drawHistory = state.drawHistory ?? [];
   let drawn;
-  ({ deck, card: drawn, history: drawHistory } = drawAfterReshuffle(deck, drawHistory));
+  ({
+    deck,
+    card: drawn,
+    history: drawHistory,
+    state
+  } = drawAfterReshuffle(deck, drawHistory, state));
   players = players.map(
     (p, i) => i === idx ? { ...p, hand: [...p.hand, drawn] } : p
   );
@@ -351,12 +434,22 @@ function playCard(state, cardIndex) {
     return { ...s, playStep: "show_result" };
   }
   if (cardId === "merchant") {
-    const deck = [...s.deck];
+    let deck = [...s.deck];
     const extra = [];
-    if (deck.length > 0) extra.push(deck.pop());
-    if (deck.length > 0) extra.push(deck.pop());
+    let st2 = s;
+    let dh = st2.drawHistory ?? [];
+    if (deck.length > 0) {
+      let card;
+      ({ deck, card, history: dh, state: st2 } = drawAfterReshuffle(deck, dh, st2));
+      extra.push(card);
+    }
+    if (deck.length > 0) {
+      let card;
+      ({ deck, card, history: dh, state: st2 } = drawAfterReshuffle(deck, dh, st2));
+      extra.push(card);
+    }
     const merchantOptions = [...newHand, ...extra];
-    s = { ...s, deck, merchantOptions };
+    s = { ...st2, deck, drawHistory: dh, merchantOptions };
     if (player.isHuman) {
       return { ...s, playStep: "merchant_select" };
     } else {
@@ -446,6 +539,8 @@ function resolveCannon(state, targetIdx) {
   const target = state.players[targetIdx];
   let players = state.players;
   let deck = [...state.deck];
+  let st2 = state;
+  let dh = st2.drawHistory ?? [];
   let msg = "";
   if (target.isProtected && targetIdx !== state.currentPlayerIndex) {
     msg = `${target.name} \u09B8\u09C1\u09B0\u0995\u09CD\u09B7\u09BF\u09A4 \u2014 \u0995\u09BE\u09AE\u09BE\u09A8 \u099A\u09BE\u09B2\u0995\u09C7\u09B0 \u0995\u09CB\u09A8\u09CB \u09AA\u09CD\u09B0\u09AD\u09BE\u09AC \u09A8\u09C7\u0987!`;
@@ -453,7 +548,8 @@ function resolveCannon(state, targetIdx) {
     const discarded = target.hand[0];
     const isPirate = discarded === "pirate";
     if (deck.length > 0) {
-      const newCard = deck.pop();
+      let newCard;
+      ({ deck, card: newCard, history: dh, state: st2 } = drawAfterReshuffle(deck, dh, st2));
       if (isPirate) {
         players = eliminatePlayer(players, targetIdx, discarded);
         msg = `${attacker.name} ${target.name}-\u098F\u09B0 \u0989\u09AA\u09B0 \u0995\u09BE\u09AE\u09BE\u09A8 \u099A\u09BE\u09B2\u09BF\u09AF\u09BC\u09C7\u099B\u09C7\u09A8 \u2014 \u09A4\u09BF\u09A8\u09BF \u099C\u09B2\u09A6\u09B8\u09CD\u09AF\u09C1 \u09A1\u09BF\u09B8\u0995\u09BE\u09B0\u09CD\u09A1 \u0995\u09B0\u09C7 \u09AC\u09BE\u09A6 \u09AA\u09A1\u09BC\u09C7\u099B\u09C7\u09A8!`;
@@ -475,7 +571,7 @@ function resolveCannon(state, targetIdx) {
       }
     }
   }
-  const s = addLog({ ...state, players, deck, resultMessage: msg }, msg);
+  const s = addLog({ ...st2, players, deck, drawHistory: dh, resultMessage: msg }, msg);
   return { ...s, playStep: "show_result" };
 }
 function resolveSailor(state, targetIdx) {
@@ -502,7 +598,14 @@ function merchantSelect(state, keepIndex) {
   const options = state.merchantOptions;
   const kept = options[keepIndex];
   const rest = options.filter((_, i) => i !== keepIndex);
-  const deck = shuffle([...rest, ...state.deck]);
+  let deck;
+  if (state?.pfSeed) {
+    const out = reshuffleRemainingDeckPF([...rest, ...state.deck], state);
+    deck = out.deck;
+    state = out.state;
+  } else {
+    deck = shuffle([...rest, ...state.deck]);
+  }
   const players = state.players.map(
     (p, i) => i === state.currentPlayerIndex ? { ...p, hand: [kept] } : p
   );
@@ -602,19 +705,35 @@ function endRound(state, winnerId) {
     resultMsg
   );
   if (gameWinner) {
-    return { ...s, phase: "game_end", resultMessage: `${gameWinner.name} ${gameWinner.tokens} \u099F\u09CB\u0995\u09C7\u09A8 \u09A6\u09BF\u09AF\u09BC\u09C7 \u0997\u09C7\u09AE \u099C\u09BF\u09A4\u09C7\u099B\u09C7\u09A8!` };
+    return {
+      ...s,
+      phase: "game_end",
+      pfReveal: s.pfSeed ?? null,
+      resultMessage: `${gameWinner.name} ${gameWinner.tokens} \u099F\u09CB\u0995\u09C7\u09A8 \u09A6\u09BF\u09AF\u09BC\u09C7 \u0997\u09C7\u09AE \u099C\u09BF\u09A4\u09C7\u099B\u09C7\u09A8!`
+    };
   }
-  return { ...s, phase: "round_end" };
+  return { ...s, phase: "round_end", pfReveal: s.pfSeed ?? null };
 }
 function startNewRound(state, firstPlayerIdx) {
   const numPlayers = state.players.length;
+  const pf = newProvablyFairRound();
   let deck = shuffle(createDeck(state.cardCounts ?? DEFAULT_CARD_COUNTS), numPlayers);
   let drawHistory = state.drawHistory ?? [];
   let hiddenCard;
-  ({ deck, card: hiddenCard, history: drawHistory } = drawAfterReshuffle(deck, drawHistory));
+  ({
+    deck,
+    card: hiddenCard,
+    history: drawHistory,
+    state
+  } = drawAfterReshuffle(deck, drawHistory, { ...state, ...pf }));
   const players = state.players.map((p) => {
     let card;
-    ({ deck, card, history: drawHistory } = drawAfterReshuffle(deck, drawHistory));
+    ({
+      deck,
+      card,
+      history: drawHistory,
+      state
+    } = drawAfterReshuffle(deck, drawHistory, state));
     return {
       ...p,
       isEliminated: false,
@@ -644,7 +763,11 @@ function startNewRound(state, firstPlayerIdx) {
     peekCard: null,
     resultMessage: "",
     round,
-    log: [`\u09B0\u09BE\u0989\u09A8\u09CD\u09A1 ${round} \u09B6\u09C1\u09B0\u09C1!`, ...state.log]
+    pfCommit: pf.pfCommit,
+    pfReveal: null,
+    pfSeed: pf.pfSeed,
+    pfCounter: pf.pfCounter,
+    log: [`\u09B0\u09BE\u0989\u09A8\u09CD\u09A1 ${round} \u09B6\u09C1\u09B0\u09C1!`, `\u09B6\u09BE\u09AB\u09B2 \u09B9\u09CD\u09AF\u09BE\u09B6: ${pf.pfCommit.slice(0, 16)}`, ...state.log]
   };
 }
 
@@ -712,6 +835,20 @@ function redactPeekForOthers(state) {
   }
 }
 
+function stripServerSecrets(state) {
+  try {
+    if (!state || typeof state !== "object") return state;
+    const s = { ...state };
+    // Never send PF seed while the round/game is running.
+    // It will be revealed via pfReveal after round_end/game_end.
+    delete s.pfSeed;
+    delete s.pfCounter;
+    return s;
+  } catch {
+    return state;
+  }
+}
+
 function emitState(io2, roomId, eventName, state) {
   const room = getRoom(roomId);
   if (!room) return;
@@ -719,12 +856,13 @@ function emitState(io2, roomId, eventName, state) {
   if (state?.phase === "playing" && state?.playStep === "peek_result") {
     for (const p of room.players) {
       if (!p?.socketId) continue;
-      const payloadState = p.playerId === state.currentPlayerIndex ? state : redactPeekForOthers(state);
+      const raw = p.playerId === state.currentPlayerIndex ? state : redactPeekForOthers(state);
+      const payloadState = stripServerSecrets(raw);
       io2.to(p.socketId).emit(eventName, { state: payloadState });
     }
     return;
   }
-  io2.to(roomId).emit(eventName, { state });
+  io2.to(roomId).emit(eventName, { state: stripServerSecrets(state) });
 }
 
 function closeRoom(io2, roomId, reason = "room_closed") {
@@ -979,9 +1117,9 @@ io.on("connection", (socket) => {
       } else if (room.gameState) {
         const st = room.gameState;
         if (st?.phase === "playing" && st?.playStep === "peek_result" && st.currentPlayerIndex !== pid) {
-          socket.emit("game_state", { state: redactPeekForOthers(st) });
+          socket.emit("game_state", { state: stripServerSecrets(redactPeekForOthers(st)) });
         } else {
-          socket.emit("game_state", { state: st });
+          socket.emit("game_state", { state: stripServerSecrets(st) });
         }
       }
     } catch (e) {
