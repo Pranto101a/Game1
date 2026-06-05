@@ -14,7 +14,7 @@ function randInt(maxExclusive) {
 }
 
 // ../pirate-card-game/lib/game-engine/src/game-logic.ts
-var CARD_COUNTS = {
+var DEFAULT_CARD_COUNTS = {
   petty_thief: 1,
   guard: 6,
   ship_worker: 2,
@@ -26,6 +26,21 @@ var CARD_COUNTS = {
   spy: 2,
   pirate: 1
 };
+
+function sanitizeCardCountsOverride(override) {
+  if (!override || typeof override !== "object") return {};
+  const clampInt = (v, min, max) => {
+    const n = typeof v === "number" ? v : Number.parseInt(String(v), 10);
+    if (!Number.isFinite(n)) return void 0;
+    return Math.max(min, Math.min(max, Math.trunc(n)));
+  };
+  const guard = clampInt(override.guard, 0, 20);
+  const merchant = clampInt(override.merchant, 0, 20);
+  const out = {};
+  if (guard !== void 0) out.guard = guard;
+  if (merchant !== void 0) out.merchant = merchant;
+  return out;
+}
 var CARD_VALUES = {
   petty_thief: 0,
   guard: 1,
@@ -51,16 +66,23 @@ var CARD_NAMES_BN = {
   pirate: "\u099C\u09B2\u09A6\u09B8\u09CD\u09AF\u09C1"
 };
 function shuffle(arr) {
-  const a = [...arr];
-  for (let i = a.length - 1; i > 0; i--) {
-    const j = randInt(i + 1);
-    [a[i], a[j]] = [a[j], a[i]];
+  let a = [...arr];
+  // Extra mixing + random "cut" to reduce perceived patterns when starting games repeatedly.
+  for (let pass = 0; pass < 2; pass++) {
+    for (let i = a.length - 1; i > 0; i--) {
+      const j = randInt(i + 1);
+      [a[i], a[j]] = [a[j], a[i]];
+    }
+  }
+  if (a.length > 1) {
+    const cut = randInt(a.length);
+    a = a.slice(cut).concat(a.slice(0, cut));
   }
   return a;
 }
-function createDeck() {
+function createDeck(cardCounts = DEFAULT_CARD_COUNTS) {
   const deck = [];
-  for (const [id, count] of Object.entries(CARD_COUNTS)) {
+  for (const [id, count] of Object.entries(cardCounts)) {
     for (let i = 0; i < count; i++) deck.push(id);
   }
   return deck;
@@ -80,9 +102,10 @@ function addLog(state, msg) {
 function hasMultipleHumans(players) {
   return players.filter((p) => p.isHuman).length > 1;
 }
-function initGame(configs, online) {
+function initGame(configs, online, cardCountsOverride) {
   const numPlayers = configs.length;
-  const deck = shuffle(createDeck());
+  const cardCounts = { ...DEFAULT_CARD_COUNTS, ...sanitizeCardCountsOverride(cardCountsOverride) };
+  const deck = shuffle(createDeck(cardCounts));
   const hiddenCard = deck.pop();
   const players = configs.map((cfg, i) => ({
     id: i,
@@ -104,6 +127,7 @@ function initGame(configs, online) {
     players,
     deck,
     hiddenCard,
+    cardCounts,
     currentPlayerIndex: 0,
     cardBeingPlayed: null,
     targetPlayerIndex: null,
@@ -440,7 +464,7 @@ function endRound(state, winnerId) {
   return { ...s, phase: "round_end" };
 }
 function startNewRound(state, firstPlayerIdx) {
-  const deck = shuffle(createDeck());
+  const deck = shuffle(createDeck(state.cardCounts ?? DEFAULT_CARD_COUNTS));
   const hiddenCard = deck.pop();
   const players = state.players.map((p) => ({
     ...p,
@@ -517,6 +541,7 @@ function aiTakeTurn(state) {
 // entry.ts
 var rooms = /* @__PURE__ */ new Map();
 var autoAckTimers = /* @__PURE__ */ new Map();
+var autoRoundTimers = /* @__PURE__ */ new Map();
 function generateRoomId() {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
   let id = "";
@@ -529,7 +554,8 @@ function createRoom(socketId, playerName) {
     id: roomId,
     players: [{ socketId, name: playerName, playerId: 0 }],
     gameState: null,
-    phase: "lobby"
+    phase: "lobby",
+    cardCountsOverride: null
   };
   rooms.set(roomId, room);
   return room;
@@ -573,14 +599,14 @@ function runAiIfNeeded(state) {
   }
   return s;
 }
-function startGame(roomId) {
+function startGame(roomId, cardCountsOverride) {
   const room = rooms.get(roomId);
   if (!room || room.players.length < 2) return null;
   const configs = room.players.map((p) => ({
     name: p.name,
     isHuman: true
   }));
-  let state = initGame(configs, true);
+  let state = initGame(configs, true, cardCountsOverride);
   state = beginTurn(state);
   state = runAiIfNeeded(state);
   room.gameState = state;
@@ -606,11 +632,6 @@ function applyAction(roomId, playerId, actionData) {
       state = acknowledgeResult(state);
     }
     state = runAiIfNeeded(state);
-    if (state.phase === "round_end") {
-      const lastWinner = state.players.reduce((a, b) => b.tokens > a.tokens ? b : a);
-      state = startNewRound(state, lastWinner.id);
-      state = runAiIfNeeded(state);
-    }
   } catch {
     return null;
   }
@@ -622,6 +643,12 @@ function clearAutoAckTimer(roomId) {
   const t = autoAckTimers.get(roomId);
   if (t) clearTimeout(t);
   autoAckTimers.delete(roomId);
+}
+
+function clearAutoRoundTimer(roomId) {
+  const t = autoRoundTimers.get(roomId);
+  if (t) clearTimeout(t);
+  autoRoundTimers.delete(roomId);
 }
 
 function scheduleAutoAcknowledge(io2, roomId) {
@@ -646,6 +673,31 @@ function scheduleAutoAcknowledge(io2, roomId) {
     scheduleAutoAcknowledge(io2, roomId);
   }, 5e3);
   autoAckTimers.set(roomId, t);
+}
+
+function scheduleAutoNextRound(io2, roomId) {
+  clearAutoRoundTimer(roomId);
+  const room = getRoom(roomId);
+  if (!room?.gameState) return;
+  const s = room.gameState;
+  if (s.phase !== "round_end") return;
+  if (s.isOnline !== true) return;
+  const expectedRound = s.round;
+  const lastWinner = s.players.reduce((a, b) => b.tokens > a.tokens ? b : a);
+  const firstPlayerId = lastWinner.id;
+  const t = setTimeout(() => {
+    const r2 = getRoom(roomId);
+    if (!r2?.gameState) return;
+    const cur = r2.gameState;
+    if (cur.phase !== "round_end") return;
+    if (cur.round !== expectedRound) return;
+    let nextState = startNewRound(cur, firstPlayerId);
+    nextState = runAiIfNeeded(nextState);
+    r2.gameState = nextState;
+    io2.to(roomId).emit("game_action_ack", { state: nextState });
+    scheduleAutoAcknowledge(io2, roomId);
+  }, 5e3);
+  autoRoundTimers.set(roomId, t);
 }
 var port = Number(process.env.PORT ?? "3000");
 var httpServer = createServer((req, res) => {
@@ -696,7 +748,7 @@ io.on("connection", (socket) => {
       socket.emit("game_state", { state: room.gameState });
     }
   });
-  socket.on("start_game", ({ roomId, playerId }) => {
+  socket.on("start_game", ({ roomId, playerId, cardCounts }) => {
     const room = getRoom(roomId);
     if (!room) {
       socket.emit("error", "\u09B0\u09C1\u09AE \u09AA\u09BE\u0993\u09AF\u09BC\u09BE \u09AF\u09BE\u09AF\u09BC\u09A8\u09BF");
@@ -710,13 +762,16 @@ io.on("connection", (socket) => {
       socket.emit("error", "\u0995\u09AE\u09AA\u0995\u09CD\u09B7\u09C7 \u09E8 \u099C\u09A8 \u0996\u09C7\u09B2\u09CB\u09AF\u09BC\u09BE\u09A1\u09BC \u09AA\u09CD\u09B0\u09AF\u09BC\u09CB\u099C\u09A8");
       return;
     }
-    const state = startGame(roomId);
+    const override = sanitizeCardCountsOverride(cardCounts);
+    room.cardCountsOverride = override;
+    const state = startGame(roomId, override);
     if (!state) {
       socket.emit("error", "\u0996\u09C7\u09B2\u09BE \u09B6\u09C1\u09B0\u09C1 \u0995\u09B0\u09A4\u09C7 \u09AC\u09CD\u09AF\u09B0\u09CD\u09A5 \u09B9\u09AF\u09BC\u09C7\u099B\u09C7");
       return;
     }
     io.to(roomId).emit("game_state", { state });
     scheduleAutoAcknowledge(io, roomId);
+    scheduleAutoNextRound(io, roomId);
   });
   socket.on("game_action", ({ roomId, playerId, ...actionData }) => {
     const state = applyAction(roomId, playerId, actionData);
@@ -726,6 +781,7 @@ io.on("connection", (socket) => {
     }
     io.to(roomId).emit("game_action_ack", { state });
     scheduleAutoAcknowledge(io, roomId);
+    scheduleAutoNextRound(io, roomId);
   });
 });
 httpServer.listen(port, () => {
