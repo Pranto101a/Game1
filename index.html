@@ -565,8 +565,16 @@
       const oldRoomClosedHandler =
         'Y.on("error",ne=>{b(`ত্রুটি: ${ne}`)}),Y.on("disconnect",()=>b("সংযোগ বিচ্ছিন্ন হয়েছে")),()=>{Y.disconnect()}';
       const newRoomClosedHandler =
-        'Y.on("error",ne=>{b(`ত্রুটি: ${ne}`)}),Y.on("room_closed",()=>{try{sessionStorage.removeItem("jd_online_room");sessionStorage.removeItem("jd_online_player_id");sessionStorage.removeItem("jd_online_name")}catch(e){}try{e("/")}catch(e){}b("রুম বন্ধ হয়েছে")}),Y.on("disconnect",()=>b("সংযোগ বিচ্ছিন্ন হয়েছে")),()=>{Y.disconnect()}';
+        'Y.on("error",ne=>{b(`ত্রুটি: ${ne}`)}),Y.on("room_closed",()=>{b("রুম বন্ধ হয়েছে")}),Y.on("disconnect",()=>b("সংযোগ বিচ্ছিন্ন হয়েছে")),()=>{Y.disconnect()}';
       if (code.includes(oldRoomClosedHandler)) code = code.replace(oldRoomClosedHandler, newRoomClosedHandler);
+
+      // 8c) Host যদি নিজে রুম কেটে/বন্ধ করে, তাহলে সার্ভারকে close_room পাঠাবে (ইচ্ছাকৃত exit)।
+      // (আগে "disconnect" থেকেই রুম delete হয়ে যেত—Render/Railway তে এতে রুম create এর পরেই হারিয়ে যাওয়ার সমস্যা হতো।)
+      const oldLeaveFn =
+        'function L(){sessionStorage.removeItem("jd_online_room"),sessionStorage.removeItem("jd_online_player_id"),sessionStorage.removeItem("jd_online_name"),e("/")}';
+      const newLeaveFn =
+        'function L(){try{c===0&&R("close_room",{})}catch(e){}sessionStorage.removeItem("jd_online_room"),sessionStorage.removeItem("jd_online_player_id"),sessionStorage.removeItem("jd_online_name"),e("/")}';
+      if (code.includes(oldLeaveFn)) code = code.replace(oldLeaveFn, newLeaveFn);
 
       // 9) Card tracker: use selected counts for Guard/Merchant (dot count + "x/x বাকি")
       const oldTrackerCounts1 = 'px.map(h=>{const m=Jh[h],p=f[h]??0,';
