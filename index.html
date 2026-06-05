@@ -474,7 +474,7 @@
       const oldBeginTurnDraw =
         'const r=[...e.deck],l=r.pop();i=i.map((h,m)=>m===n?{...h,hand:[...h.hand,l]}:h);';
       const newBeginTurnDraw =
-        'let r=[...e.deck],dh=e.drawHistory??[];let l;{try{for(let pass=0;pass<2;pass++){for(let i=r.length-1;i>0;i--){const j=__secureRandInt(i+1);[r[i],r[j]]=[r[j],r[i]]}}if(r.length>1){const cut=__secureRandInt(r.length);r=r.slice(cut).concat(r.slice(0,cut))}}catch(e){}let tries=Math.min(12,r.length),pick=r.length-1;for(let t=0;t<tries;t++){const idx=__secureRandInt(r.length),card=r[idx],L=dh.length;const bad=(L>=1&&card===dh[L-1])||(L>=3&&dh[L-3]===dh[L-1]&&card===dh[L-2]);if(!bad||t===tries-1){pick=idx;break}}l=r.splice(pick,1)[0];dh=[...dh.slice(-20),l]}i=i.map((h,m)=>m===n?{...h,hand:[...h.hand,l]}:h);';
+        'let r=[...e.deck],dh=e.drawHistory??[];let l;{try{for(let pass=0;pass<2;pass++){for(let i=r.length-1;i>0;i--){const j=__secureRandInt(i+1);[r[i],r[j]]=[r[j],r[i]]}}if(r.length>1){const cut=__secureRandInt(r.length);r=r.slice(cut).concat(r.slice(0,cut))}}catch(e){}l=r.pop();dh=[...dh.slice(-20),l]}i=i.map((h,m)=>m===n?{...h,hand:[...h.hand,l]}:h);';
       if (code.includes(oldBeginTurnDraw)) code = code.replace(oldBeginTurnDraw, newBeginTurnDraw);
 
       const oldBeginTurnReturn =
