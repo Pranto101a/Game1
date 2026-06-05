@@ -121,6 +121,26 @@ function shuffle(arr, numPlayers) {
   }
   return [...arr];
 }
+
+function reshuffleRemainingDeck(deck) {
+  // Lightweight reshuffle of the *remaining* deck before each deal/draw.
+  // This matches the requested behavior: every time a card is given, the deck is shuffled again.
+  let a = [...deck];
+  try {
+    for (let pass = 0; pass < 2; pass++) {
+      for (let i = a.length - 1; i > 0; i--) {
+        const j = randInt(i + 1);
+        [a[i], a[j]] = [a[j], a[i]];
+      }
+    }
+    if (a.length > 1) {
+      const cut = randInt(a.length);
+      a = a.slice(cut).concat(a.slice(0, cut));
+    }
+  } catch {
+  }
+  return a;
+}
 function createDeck(cardCounts = DEFAULT_CARD_COUNTS) {
   const deck = [];
   for (const [id, count] of Object.entries(cardCounts)) {
@@ -188,10 +208,12 @@ function initGame(configs, online, cardCountsOverride, tokensToWinOverride) {
   // draw hidden card randomly too (so the top-of-deck order doesn't dominate perceived patterns)
   let drawHistory = [];
   let hiddenCard;
+  deck = reshuffleRemainingDeck(deck);
   ({ deck, card: hiddenCard, history: drawHistory } = drawFromDeckRandom(deck, drawHistory, numPlayers));
   const tokensOverride = sanitizeTokensToWinOverride(tokensToWinOverride);
   const players = configs.map((cfg, i) => {
     let card;
+    deck = reshuffleRemainingDeck(deck);
     ({ deck, card, history: drawHistory } = drawFromDeckRandom(deck, drawHistory, numPlayers));
     return {
       id: i,
@@ -241,6 +263,7 @@ function beginTurn(state) {
   }
   let deck = [...state.deck];
   let drawHistory = state.drawHistory ?? [];
+  deck = reshuffleRemainingDeck(deck);
   let drawn;
   ({ deck, card: drawn, history: drawHistory } = drawFromDeckRandom(deck, drawHistory, players.length));
   players = players.map(
@@ -584,9 +607,11 @@ function startNewRound(state, firstPlayerIdx) {
   let deck = shuffle(createDeck(state.cardCounts ?? DEFAULT_CARD_COUNTS), numPlayers);
   let drawHistory = state.drawHistory ?? [];
   let hiddenCard;
+  deck = reshuffleRemainingDeck(deck);
   ({ deck, card: hiddenCard, history: drawHistory } = drawFromDeckRandom(deck, drawHistory, numPlayers));
   const players = state.players.map((p) => {
     let card;
+    deck = reshuffleRemainingDeck(deck);
     ({ deck, card, history: drawHistory } = drawFromDeckRandom(deck, drawHistory, numPlayers));
     return {
       ...p,
@@ -691,12 +716,46 @@ function emitState(io2, roomId, eventName, state) {
   // Ship worker peek should be private (only the player who played sees the card)
   if (state?.phase === "playing" && state?.playStep === "peek_result") {
     for (const p of room.players) {
+      if (!p?.socketId) continue;
       const payloadState = p.playerId === state.currentPlayerIndex ? state : redactPeekForOthers(state);
       io2.to(p.socketId).emit(eventName, { state: payloadState });
     }
     return;
   }
   io2.to(roomId).emit(eventName, { state });
+}
+
+function closeRoom(io2, roomId, reason = "room_closed") {
+  const room = getRoom(roomId);
+  if (!room) return;
+  try {
+    clearAutoAckTimer(roomId);
+    clearAutoRoundTimer(roomId);
+  } catch {
+  }
+  try {
+    io2.to(roomId).emit("room_closed", { roomId, reason });
+  } catch {
+  }
+  // Force-disconnect all sockets that were in the room (so clients can't stay "stuck").
+  try {
+    for (const p of room.players) {
+      if (!p?.socketId) continue;
+      const s = io2.sockets?.sockets?.get(p.socketId);
+      if (s) {
+        try {
+          s.leave(roomId);
+        } catch {
+        }
+        try {
+          s.disconnect(true);
+        } catch {
+        }
+      }
+    }
+  } catch {
+  }
+  rooms.delete(roomId);
 }
 function generateRoomId() {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -876,6 +935,8 @@ io.on("connection", (socket) => {
     try {
       const room = createRoom(socket.id, playerName);
       socket.join(room.id);
+      socket.data.roomId = room.id;
+      socket.data.playerId = 0;
       socket.emit("room_created", { roomId: room.id, playerId: 0 });
       io.to(room.id).emit("lobby_update", { players: getPlayerNames(room) });
     } catch {
@@ -891,6 +952,8 @@ io.on("connection", (socket) => {
       }
       const playerId = room.players.find((p) => p.socketId === socket.id)?.playerId ?? -1;
       socket.join(roomId);
+      socket.data.roomId = roomId;
+      socket.data.playerId = playerId;
       socket.emit("room_joined", { roomId, playerId });
       io.to(roomId).emit("lobby_update", { players: getPlayerNames(room) });
     } catch (e) {
@@ -907,6 +970,8 @@ io.on("connection", (socket) => {
         return;
       }
       socket.join(roomId);
+      socket.data.roomId = roomId;
+      socket.data.playerId = Number.isFinite(pid) ? pid : playerId;
       if (room.phase === "lobby") {
         io.to(roomId).emit("lobby_update", { players: getPlayerNames(room) });
       } else if (room.gameState) {
@@ -920,6 +985,24 @@ io.on("connection", (socket) => {
     } catch (e) {
       console.error(e);
       socket.emit("error", "\u09B0\u09C1\u09AE \u09AB\u09BF\u09B0\u09C7 \u09AA\u09C7\u09A4\u09C7 \u09AC\u09CD\u09AF\u09B0\u09CD\u09A5 \u09B9\u09AF\u09BC\u09C7\u099B\u09C7");
+    }
+  });
+  // Host-only: close the room and kick everyone out.
+  socket.on("close_room", ({ roomId, playerId }) => {
+    try {
+      const pid = typeof playerId === "number" ? playerId : Number.parseInt(String(playerId), 10);
+      const rid = roomId ?? socket.data.roomId;
+      const room = getRoom(rid);
+      if (!room) return;
+      const host = room.players.find((p) => p.playerId === 0);
+      const isHost = (Number.isFinite(pid) ? pid : playerId) === 0 && host?.socketId === socket.id;
+      if (!isHost) {
+        socket.emit("error", "\u09B6\u09C1\u09A7\u09C1 \u09B9\u09CB\u09B8\u09CD\u099F \u09B0\u09C1\u09AE \u09AC\u09A8\u09CD\u09A7 \u0995\u09B0\u09A4\u09C7 \u09AA\u09BE\u09B0\u09C7\u09A8");
+        return;
+      }
+      closeRoom(io, rid, "host_closed");
+    } catch (e) {
+      console.error(e);
     }
   });
   socket.on("start_game", ({ roomId, playerId, cardCounts, tokensToWinOverride }) => {
@@ -938,6 +1021,9 @@ io.on("connection", (socket) => {
         socket.emit("error", "\u0995\u09AE\u09AA\u0995\u09CD\u09B7\u09C7 \u09E8 \u099C\u09A8 \u0996\u09C7\u09B2\u09CB\u09AF\u09BC\u09BE\u09A1\u09BC \u09AA\u09CD\u09B0\u09AF\u09BC\u09CB\u099C\u09A8");
         return;
       }
+      // If restarting a match, clear any pending timers from the previous round/game.
+      clearAutoAckTimer(roomId);
+      clearAutoRoundTimer(roomId);
       const override = sanitizeCardCountsOverride(cardCounts);
       room.cardCountsOverride = override;
       const tokOverride = sanitizeTokensToWinOverride(tokensToWinOverride);
@@ -969,6 +1055,29 @@ io.on("connection", (socket) => {
     } catch (e) {
       console.error(e);
       socket.emit("error", "\u0985\u09AC\u09C8\u09A7 \u09AA\u09A6\u0995\u09CD\u09B7\u09C7\u09AA");
+    }
+  });
+
+  socket.on("disconnect", () => {
+    try {
+      const roomId = socket.data?.roomId;
+      if (!roomId) return;
+      const room = getRoom(roomId);
+      if (!room) return;
+      const host = room.players.find((p) => p.playerId === 0);
+      if (host?.socketId === socket.id) {
+        // Host left: kick everyone out and delete the room.
+        closeRoom(io, roomId, "host_disconnected");
+      } else {
+        // Non-host left: mark socket as gone (allow rejoin by playerId).
+        const p = room.players.find((pp) => pp.socketId === socket.id);
+        if (p) p.socketId = null;
+        if (room.phase === "lobby") {
+          io.to(roomId).emit("lobby_update", { players: getPlayerNames(room) });
+        }
+      }
+    } catch (e) {
+      console.error(e);
     }
   });
 });
