@@ -9,16 +9,16 @@ function randInt(maxExclusive) {
     // cryptoRandomInt is unbiased and much stronger than Math.random().
     return cryptoRandomInt(0, maxExclusive);
   } catch {
-    // Fallback without Math.random(): unbiased sampling from randomBytes
+    // Fallback that still uses CSPRNG (no Math.random).
     try {
       const mod = 4294967296;
       const limit = mod - mod % maxExclusive;
-      for (let attempt = 0; attempt < 50; attempt++) {
+      for (let attempt = 0; attempt < 1000; attempt++) {
         const v = randomBytes(4).readUInt32BE(0);
         if (v < limit) return v % maxExclusive;
       }
-      // last resort (still crypto-based)
-      return randomBytes(4).readUInt32BE(0) % maxExclusive;
+      // As a last resort (should not happen), return 0 deterministically.
+      return 0;
     } catch {
       return 0;
     }
@@ -185,6 +185,9 @@ function reshuffleRemainingDeck(deck) {
     if (a.length > 1) {
       const cut = randInt(a.length);
       a = a.slice(cut).concat(a.slice(0, cut));
+      // Extra cut-shuffle (requested): do a second cut for stronger mixing.
+      const cut2 = randInt(a.length);
+      a = a.slice(cut2).concat(a.slice(0, cut2));
     }
   } catch {
   }
@@ -210,6 +213,11 @@ function reshuffleRemainingDeckPF(deck, state) {
       counter = r.counter;
       const cut = r.n;
       a = a.slice(cut).concat(a.slice(0, cut));
+      // Extra cut-shuffle (requested): second cut, still deterministic.
+      const r2 = pfRandInt(state.pfSeed, counter, a.length);
+      counter = r2.counter;
+      const cut2 = r2.n;
+      a = a.slice(cut2).concat(a.slice(0, cut2));
     }
   } catch {
   }
