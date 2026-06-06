@@ -167,10 +167,9 @@
         });
       })();
 
-      const entryUrl = new URL("./assets/index-Er7WoFSS.js?v=18", import.meta.url);
-      try {
-        const res = await fetch(entryUrl);
-        let code = await res.text();
+      const entryUrl = new URL("./assets/index-Er7WoFSS.js?v=17", import.meta.url);
+      const res = await fetch(entryUrl);
+      let code = await res.text();
 
       // --- UI controls for Guard/Merchant counts (offline start + online lobby) ---
       // We inject a tiny DOM-based UI so we don't need to rebuild the bundled app.
@@ -460,7 +459,7 @@
       const oldShuffle =
         'function em(e){const n=[...e];for(let i=n.length-1;i>0;i--){const r=Math.floor(Math.random()*(i+1));[n[i],n[r]]=[n[r],n[i]]}return n}';
       const newShuffle =
-        'function __secureRandInt(e){if(typeof crypto!=="undefined"&&crypto.getRandomValues){const n=new Uint32Array(1);const t=4294967296-4294967296%e;let r;do{crypto.getRandomValues(n);r=n[0]}while(r>=t);return r%e}throw new Error(\"CSPRNG_unavailable\")}function __jdReshuffleRemainingDeck(deck){let a=[...deck];try{for(let pass=0;pass<2;pass++){for(let i=a.length-1;i>0;i--){const j=__secureRandInt(i+1);[a[i],a[j]]=[a[j],a[i]]}}if(a.length>1){const cut=__secureRandInt(a.length);a=a.slice(cut).concat(a.slice(0,cut))}}catch(e){}return a}function __jdDrawAfterReshuffle(deck,history){const d=__jdReshuffleRemainingDeck(deck);const card=d.pop();const h=Array.isArray(history)?[...history.slice(-20),card]:[card];return{deck:d,card,history:h}}function __jdNumPlayers(){try{const n=parseInt(sessionStorage.getItem(\"jd_num_players\")||\"0\",10);if(Number.isFinite(n)&&n>0)return n;const raw=sessionStorage.getItem(\"jd_players\");if(raw){const arr=JSON.parse(raw);if(Array.isArray(arr)&&arr.length>0)return arr.length}}catch{}return 0}function __jdDealSig(d,np){try{const take=np+2;if(!np||d.length<take)return\"\";return d.slice(d.length-take).join(\",\")}catch{return\"\"}}function __jdIsRepeatDeal(d){try{const np=__jdNumPlayers();if(!np||np<2)return!1;const sig=__jdDealSig(d,np);const last=sessionStorage.getItem(\"jd_last_deal_sig\")||\"\";return !!(sig&&last&&sig===last)}catch{return!1}}function em(e){for(let attempt=0;attempt<5;attempt++){let n=[...e];for(let p=0;p<6;p++){for(let i=n.length-1;i>0;i--){const r=__secureRandInt(i+1);[n[i],n[r]]=[n[r],n[i]]}}if(n.length>1){const c=__secureRandInt(n.length);n=n.slice(c).concat(n.slice(0,c));const d=__secureRandInt(n.length);n=n.slice(d).concat(n.slice(0,d))}const rep=__jdIsRepeatDeal(n);if(!rep||attempt===4){try{const np=__jdNumPlayers();const sig=__jdDealSig(n,np);sig&&sessionStorage.setItem(\"jd_last_deal_sig\",sig)}catch{}return n}}return [...e]}';
+        'function __secureRandInt(e){if(typeof crypto!=="undefined"&&crypto.getRandomValues){const n=new Uint32Array(1);const t=4294967296-4294967296%e;let r;do{crypto.getRandomValues(n);r=n[0]}while(r>=t);return r%e}return Math.floor(Math.random()*e)}function __jdNumPlayers(){try{const n=parseInt(sessionStorage.getItem(\"jd_num_players\")||\"0\",10);if(Number.isFinite(n)&&n>0)return n;const raw=sessionStorage.getItem(\"jd_players\");if(raw){const arr=JSON.parse(raw);if(Array.isArray(arr)&&arr.length>0)return arr.length}}catch{}return 0}function __jdDealSig(d,np){try{const take=np+2;if(!np||d.length<take)return\"\";return d.slice(d.length-take).join(\",\")}catch{return\"\"}}function __jdIsRepeatDeal(d){try{const np=__jdNumPlayers();if(!np||np<2)return!1;const sig=__jdDealSig(d,np);const last=sessionStorage.getItem(\"jd_last_deal_sig\")||\"\";return !!(sig&&last&&sig===last)}catch{return!1}}function em(e){for(let attempt=0;attempt<5;attempt++){let n=[...e];for(let p=0;p<6;p++){for(let i=n.length-1;i>0;i--){const r=__secureRandInt(i+1);[n[i],n[r]]=[n[r],n[i]]}}if(n.length>1){const c=__secureRandInt(n.length);n=n.slice(c).concat(n.slice(0,c));const d=__secureRandInt(n.length);n=n.slice(d).concat(n.slice(0,d))}const rep=__jdIsRepeatDeal(n);if(!rep||attempt===4){try{const np=__jdNumPlayers();const sig=__jdDealSig(n,np);sig&&sessionStorage.setItem(\"jd_last_deal_sig\",sig)}catch{}return n}}return [...e]}';
       if (code.includes(oldShuffle)) code = code.replace(oldShuffle, newShuffle);
 
       // Captain UI strictness: when Captain must be played, block clicks on the other card.
@@ -475,7 +474,7 @@
       const oldBeginTurnDraw =
         'const r=[...e.deck],l=r.pop();i=i.map((h,m)=>m===n?{...h,hand:[...h.hand,l]}:h);';
       const newBeginTurnDraw =
-        'let r=[...e.deck],dh=e.drawHistory??[];let l;try{const out=__jdDrawAfterReshuffle(r,dh);r=out.deck;l=out.card;dh=out.history}catch(e){l=r.pop();dh=[...dh.slice(-20),l]}i=i.map((h,m)=>m===n?{...h,hand:[...h.hand,l]}:h);';
+        'let r=[...e.deck],dh=e.drawHistory??[];let l;{try{for(let pass=0;pass<2;pass++){for(let i=r.length-1;i>0;i--){const j=__secureRandInt(i+1);[r[i],r[j]]=[r[j],r[i]]}}if(r.length>1){const cut=__secureRandInt(r.length);r=r.slice(cut).concat(r.slice(0,cut))}}catch(e){}l=r.pop();dh=[...dh.slice(-20),l]}i=i.map((h,m)=>m===n?{...h,hand:[...h.hand,l]}:h);';
       if (code.includes(oldBeginTurnDraw)) code = code.replace(oldBeginTurnDraw, newBeginTurnDraw);
 
       const oldBeginTurnReturn =
@@ -483,51 +482,6 @@
       const newBeginTurnReturn =
         'deck:r,players:i,drawHistory:dh,cardBeingPlayed:null';
       if (code.includes(oldBeginTurnReturn)) code = code.replace(oldBeginTurnReturn, newBeginTurnReturn);
-
-      // 4b) Initial deal + hidden card (offline): Continuous Shuffling / container sampling
-      const oldInitDeal =
-        'function Qj(e,n){const i=e.length,r=em(iw()),l=r.pop(),c=e.map((p,y)=>({id:y,name:p.name,isHuman:p.isHuman,hand:[r.pop()],discardPile:[],tokens:0,isEliminated:!1,isProtected:!1,playedThiefThisRound:!1})),f=c[0].isHuman,h=tm(c);';
-      const newInitDeal =
-        'function Qj(e,n){const i=e.length;let r=em(iw()),dh=[];let l;try{const out=__jdDrawAfterReshuffle(r,dh);r=out.deck;l=out.card;dh=out.history}catch(err){l=r.pop();dh=[...dh.slice(-20),l]}const c=e.map((p,y)=>{let first;try{const out=__jdDrawAfterReshuffle(r,dh);r=out.deck;first=out.card;dh=out.history}catch(err){first=r.pop();dh=[...dh.slice(-20),first]}return{id:y,name:p.name,isHuman:p.isHuman,hand:[first],discardPile:[],tokens:0,isEliminated:!1,isProtected:!1,playedThiefThisRound:!1}}),f=c[0].isHuman,h=tm(c);';
-      if (code.includes(oldInitDeal)) code = code.replace(oldInitDeal, newInitDeal);
-
-      const oldInitDealReturn = 'players:c,deck:r,hiddenCard:l,';
-      const newInitDealReturn = 'players:c,deck:r,drawHistory:dh,hiddenCard:l,';
-      if (code.includes(oldInitDealReturn)) code = code.replace(oldInitDealReturn, newInitDealReturn);
-
-      // 4c) New round deal (offline): Continuous Shuffling / container sampling
-      const oldNewRoundDeal =
-        'function i3(e,n){const i=em(iw()),r=i.pop(),l=e.players.map(p=>({...p,isEliminated:!1,isProtected:!1,hand:[i.pop()],discardPile:[],playedThiefThisRound:!1})),c=l[n],f=tm(l),h=c.isHuman&&f&&!e.isOnline?"pass_device":"start_turn",m=e.round+1;';
-      const newNewRoundDeal =
-        'function i3(e,n){let i=em(iw()),dh=e.drawHistory??[];let r;try{const out=__jdDrawAfterReshuffle(i,dh);i=out.deck;r=out.card;dh=out.history}catch(err){r=i.pop();dh=[...dh.slice(-20),r]}const l=e.players.map(p=>{let first;try{const out=__jdDrawAfterReshuffle(i,dh);i=out.deck;first=out.card;dh=out.history}catch(err){first=i.pop();dh=[...dh.slice(-20),first]}return{...p,isEliminated:!1,isProtected:!1,hand:[first],discardPile:[],playedThiefThisRound:!1}}),c=l[n],f=tm(l),h=c.isHuman&&f&&!e.isOnline?"pass_device":"start_turn",m=e.round+1;';
-      if (code.includes(oldNewRoundDeal)) code = code.replace(oldNewRoundDeal, newNewRoundDeal);
-
-      const oldNewRoundReturn = 'players:l,deck:i,hiddenCard:r,';
-      const newNewRoundReturn = 'players:l,deck:i,drawHistory:dh,hiddenCard:r,';
-      if (code.includes(oldNewRoundReturn)) code = code.replace(oldNewRoundReturn, newNewRoundReturn);
-
-      // 4d) Merchant extra draws: reshuffle remaining deck before each draw (offline)
-      const oldMerchantExtraDraw = 'const m=[...f.deck],p=[];m.length>0&&p.push(m.pop()),m.length>0&&p.push(m.pop());';
-      const newMerchantExtraDraw =
-        'let m=[...f.deck],dh=f.drawHistory??[],p=[],_t;try{m.length>0&&(({deck:m,card:_t,history:dh}=__jdDrawAfterReshuffle(m,dh)),p.push(_t));m.length>0&&(({deck:m,card:_t,history:dh}=__jdDrawAfterReshuffle(m,dh)),p.push(_t))}catch(e){m.length>0&&p.push(m.pop()),m.length>0&&p.push(m.pop())}';
-      if (code.includes(oldMerchantExtraDraw)) code = code.replace(oldMerchantExtraDraw, newMerchantExtraDraw);
-
-      const oldMerchantStateSet = 'f={...f,deck:m,merchantOptions:y}';
-      const newMerchantStateSet = 'f={...f,deck:m,drawHistory:dh,merchantOptions:y}';
-      if (code.includes(oldMerchantStateSet)) code = code.replace(oldMerchantStateSet, newMerchantStateSet);
-
-      // 4e) Cannon draw: reshuffle remaining deck before draw + keep drawHistory (offline)
-      const oldCannonHeader = 'function Ij(e,n){const i=e.players[e.currentPlayerIndex],r=e.players[n];let l=e.players,c=[...e.deck],f=\"\";';
-      const newCannonHeader = 'function Ij(e,n){const i=e.players[e.currentPlayerIndex],r=e.players[n];let l=e.players,c=[...e.deck],dh=e.drawHistory??[],f=\"\";';
-      if (code.includes(oldCannonHeader)) code = code.replace(oldCannonHeader, newCannonHeader);
-
-      const oldCannonPop = 'if(c.length>0){const y=c.pop();';
-      const newCannonPop = 'if(c.length>0){let y;try{({deck:c,card:y,history:dh}=__jdDrawAfterReshuffle(c,dh))}catch(e){y=c.pop();dh=[...dh.slice(-20),y]}';
-      if (code.includes(oldCannonPop)) code = code.replace(oldCannonPop, newCannonPop);
-
-      const oldCannonReturn = 'players:l,deck:c,resultMessage:f';
-      const newCannonReturn = 'players:l,deck:c,drawHistory:dh,resultMessage:f';
-      if (code.includes(oldCannonReturn)) code = code.replace(oldCannonReturn, newCannonReturn);
 
       // 5) Guard/Merchant counts selection:
       // - Offline: after player select (start button click)
@@ -565,7 +519,7 @@
       const oldOfflinePlayersFn =
         'function b(){Jt();const w=["Blackbeard","Redbeard","Ironhook","Bluecoat","Silversail"],E=[...c.map((A,R)=>({name:A||`খেলোয়াড় ${R+1}`,isHuman:!0})),...Array.from({length:r},(A,R)=>({name:w[R]??`Bot ${R+1}`,isHuman:!1}))];sessionStorage.setItem("jd_players",JSON.stringify(E)),e("/game")}';
       const newOfflinePlayersFn =
-        'function b(){Jt();const w=["Blackbeard","Redbeard","Ironhook","Bluecoat","Silversail"];const __humans=(p>c.length)?Math.max(0,p-r):p;const E=[...c.slice(0,Math.max(0,Math.min(c.length,__humans))).map((A,R)=>({name:A||`খেলোয়াড় ${R+1}`,isHuman:!0})),...Array.from({length:r},(A,R)=>({name:w[R]??`Bot ${R+1}`,isHuman:!1}))];sessionStorage.setItem("jd_num_players",String(E.length)),sessionStorage.setItem("jd_players",JSON.stringify(E)),e("/game")}';
+        'function b(){Jt();const w=["Blackbeard","Redbeard","Ironhook","Bluecoat","Silversail"],E=[...c.slice(0,p).map((A,R)=>({name:A||`খেলোয়াড় ${R+1}`,isHuman:!0})),...Array.from({length:r},(A,R)=>({name:w[R]??`Bot ${R+1}`,isHuman:!1}))];sessionStorage.setItem("jd_num_players",String(E.length)),sessionStorage.setItem("jd_players",JSON.stringify(E)),e("/game")}';
       if (code.includes(oldOfflinePlayersFn)) code = code.replace(oldOfflinePlayersFn, newOfflinePlayersFn);
 
       // Captain rule bugfix (offline): If Captain + (Cannon or Sailor) is in hand, Captain MUST be played.
@@ -637,7 +591,7 @@
       const oldShipWorkerPeek =
         'if(i===\"ship_worker\"){const l=r.players[n],c=l.hand[0]??null,f=`${r.players[r.currentPlayerIndex].name} ${l.name}-এর কার্ড দেখেছেন।`;return zt({...r,peekCard:c,resultMessage:`${l.name}-এর হাতে আছে: ${c?Te[c]:\"???\"}`,playStep:\"peek_result\"},f)}';
       const newShipWorkerPeek =
-        'if(i===\"ship_worker\"){const l=r.players[n],c=l.hand[0]??null,h=r.players[r.currentPlayerIndex],f=`${h.name} ${l.name}-এর কার্ড দেখেছেন।`;if(!h.isHuman){try{const mem=window.__jd_ai_mem||(window.__jd_ai_mem={});mem.peek=mem.peek||{};mem.peek[n]=c}catch(e){}}return h.isHuman?zt({...r,peekCard:c,resultMessage:`${l.name}-এর হাতে আছে: ${c?Te[c]:\"???\"}`,playStep:\"peek_result\"},f):zt({...r,peekCard:c,resultMessage:`${h.name} ${l.name}-এর কার্ড দেখেছে।`,playStep:\"show_result\"},f)}';
+        'if(i===\"ship_worker\"){const l=r.players[n],c=l.hand[0]??null,h=r.players[r.currentPlayerIndex],f=`${h.name} ${l.name}-এর কার্ড দেখেছেন।`;return h.isHuman?zt({...r,peekCard:c,resultMessage:`${l.name}-এর হাতে আছে: ${c?Te[c]:\"???\"}`,playStep:\"peek_result\"},f):zt({...r,peekCard:c,resultMessage:`${h.name} ${l.name}-এর কার্ড দেখেছে।`,playStep:\"show_result\"},f)}';
       if (code.includes(oldShipWorkerPeek)) code = code.replace(oldShipWorkerPeek, newShipWorkerPeek);
 
       // 11) Smarter AI:
@@ -652,187 +606,8 @@
       const oldAiGuardGuess =
         'function lw(e,n){const i=[\"ship_worker\",\"swordsman\",\"cannon\",\"merchant\",\"sailor\",\"captain\",\"spy\",\"pirate\",\"petty_thief\"],r=i[Math.floor(Math.random()*i.length)];return aw({...e,targetPlayerIndex:n},r)}';
       const newAiGuardGuess =
-        'function lw(e,n){const guess=[\"ship_worker\",\"swordsman\",\"cannon\",\"merchant\",\"sailor\",\"captain\",\"spy\",\"pirate\",\"petty_thief\"];const cc=typeof window!==\"undefined\"&&window.__jdGetCardCounts?window.__jdGetCardCounts():{};const base={...Jh,guard:cc.guard??Jh.guard,merchant:cc.merchant??Jh.merchant};const used={};for(const p of e.players)for(const d of p.discardPile)used[d]=(used[d]??0)+1;const ids=Object.keys(base);let tot=0;const left={};for(const id of ids){const v=Math.max(0,(base[id]??0)-(used[id]??0));left[id]=v;tot+=v}const prob=id=>tot?(left[id]||0)/tot:0;const mem=typeof window!==\"undefined\"&&window.__jd_ai_mem?window.__jd_ai_mem:{};const tPlayed=(mem.played&&mem.played[n])?mem.played[n]:{};let best=-1,cands=[];for(const id of guess){let p=prob(id);p+=Math.min(.3,(tPlayed[id]||0)*.06);if(p>best){best=p;cands=[id]}else if(p===best){cands.push(id)}}if(!cands.length)cands=guess;let __i=0;try{__i=__secureRandInt(cands.length)}catch(e){__i=0}const pick=cands[__i];return aw({...e,targetPlayerIndex:n},pick)}';
+        'function lw(e,n){const guess=[\"ship_worker\",\"swordsman\",\"cannon\",\"merchant\",\"sailor\",\"captain\",\"spy\",\"pirate\",\"petty_thief\"];const cc=typeof window!==\"undefined\"&&window.__jdGetCardCounts?window.__jdGetCardCounts():{};const base={...Jh,guard:cc.guard??Jh.guard,merchant:cc.merchant??Jh.merchant};const used={};for(const p of e.players)for(const d of p.discardPile)used[d]=(used[d]??0)+1;const ids=Object.keys(base);let tot=0;const left={};for(const id of ids){const v=Math.max(0,(base[id]??0)-(used[id]??0));left[id]=v;tot+=v}const prob=id=>tot?(left[id]||0)/tot:0;const mem=typeof window!==\"undefined\"&&window.__jd_ai_mem?window.__jd_ai_mem:{};const tPlayed=(mem.played&&mem.played[n])?mem.played[n]:{};let best=-1,cands=[];for(const id of guess){let p=prob(id);p+=Math.min(.3,(tPlayed[id]||0)*.06);if(p>best){best=p;cands=[id]}else if(p===best){cands.push(id)}}if(!cands.length)cands=guess;const pick=cands[typeof __secureRandInt===\"function\"?__secureRandInt(cands.length):Math.floor(Math.random()*cands.length)];return aw({...e,targetPlayerIndex:n},pick)}';
       if (code.includes(oldAiGuardGuess)) code = code.replace(oldAiGuardGuess, newAiGuardGuess);
-
-      // 11c) Offline bot upgrade: Context-Aware Utility System (overwrite AI logic safely)
-      // We overwrite the AI functions via regex so this works even if the upstream bundle changes slightly.
-      try {
-        const __jdAiO3 = `function o3(e){
-          const me=e.players[e.currentPlayerIndex],hand=me.hand;
-          if(Wd(hand))return Ji(e,hand.indexOf("captain"));
-          const mem=window.__jd_ai_mem||(window.__jd_ai_mem={played:{},agg:{},peek:{},lastPlayed:{},snap:null,round:null});
-          // Reset per round
-          try{if(mem.round!==e.round){mem.round=e.round;mem.peek={};mem.lastPlayed={};mem.snap=e.players.map(p=>p.discardPile?p.discardPile.length:0)}}catch(_){}
-          // Observe new discards => learn "context" (who is aggressive / what was played)
-          try{
-            if(!mem.snap||mem.snap.length!==e.players.length)mem.snap=e.players.map(p=>p.discardPile?p.discardPile.length:0);
-            for(let pid=0;pid<e.players.length;pid++){
-              const p=e.players[pid],old=mem.snap[pid]??0,cur=p.discardPile?p.discardPile.length:0;
-              if(cur<old){mem.snap[pid]=cur;continue}
-              if(cur>old){
-                const newCards=p.discardPile.slice(old);
-                mem.played[pid]=mem.played[pid]||{};
-                for(const c of newCards){mem.played[pid][c]=(mem.played[pid][c]||0)+1;mem.lastPlayed[pid]=c;mem.agg[pid]=(mem.agg[pid]||0)+Math.max(0,(Rt[c]??0)-3)}
-                mem.snap[pid]=cur
-              }
-            }
-          }catch(_){}
-
-          const others=e.players.filter(p=>!p.isEliminated&&p.id!==e.currentPlayerIndex);
-          let leaderId=others[0]?.id??0,bestTok=-1;
-          for(const p of others){const t=p.tokens??0;if(t>bestTok){bestTok=t;leaderId=p.id}}
-          const myTok=me.tokens??0,behind=myTok<bestTok;
-          const late=(e.deck?.length??0)<=2;
-          const counterMoment=behind&&((Rt[mem.lastPlayed?.[leaderId]]??0)>=7);
-
-          const cc=window.__jdGetCardCounts?window.__jdGetCardCounts():{};
-          const base={...Jh,guard:cc.guard??Jh.guard,merchant:cc.merchant??Jh.merchant};
-          const used={};for(const p of e.players)for(const d of p.discardPile)used[d]=(used[d]??0)+1;for(const h of hand)used[h]=(used[h]??0)+1;
-          const ids=Object.keys(base);let tot=0;const left={};
-          for(const id of ids){const v=Math.max(0,(base[id]??0)-(used[id]??0));left[id]=v;tot+=v}
-          const prob=id=>tot?(left[id]||0)/tot:0;
-          const expVal=()=>{if(tot<=0)return 0;let s=0;for(const id of ids)s+=(Rt[id]??0)*(left[id]||0);return s/tot};
-          const avgVal=expVal();
-          const pLess=val=>{if(tot<=0)return .5;let s=0;for(const id of ids)if((Rt[id]??-1)<val)s+=prob(id);return s};
-
-          function utilityPlay(idx){
-            const play=hand[idx],keep=hand[idx===0?1:0];
-            const playVal=Rt[play]??0,keepVal=Rt[keep]??0;
-            if(play==="pirate")return-1e9;
-            let u=0;
-            u+=keepVal*(late?28:13);       // keep strong card late
-            if(keep==="pirate")u-=900;     // never leave pirate in hand
-            u-=playVal*6;                  // don't waste strong card
-            const swing=behind?1.25:0.85;
-            const leaderTok=e.players[leaderId]?.tokens??0;
-            switch(play){
-              case "guard":{
-                const t=gc(e,"guard"); if(!t||!t.length){u-=25;break}
-                const peek=mem.peek?.[leaderId]; const pHit=peek&&peek!=="guard"?1:Math.min(.65,Math.max(prob("captain"),prob("pirate"),prob("merchant"),prob("cannon"),prob("sailor")));
-                u+=swing*(pHit*180+leaderTok*22)+(counterMoment?25:0); break;
-              }
-              case "ship_worker":{
-                const t=gc(e,"ship_worker"); if(!t||!t.length){u-=18;break}
-                if(keep==="guard"&&!late)u+=95; // combo setup
-                u+=behind?35:10; break;
-              }
-              case "swordsman":{
-                const t=gc(e,"swordsman"); if(!t||!t.length){u-=20;break}
-                const win=pLess(keepVal); u+=swing*(win*170-(1-win)*95)+leaderTok*12; break;
-              }
-              case "cannon":{
-                const t=gc(e,"cannon"); if(!t||!t.length){u-=10;break}
-                const pPir=prob("pirate"); u+=swing*(pPir*230+95+leaderTok*24)+(counterMoment?35:0); break;
-              }
-              case "merchant":{
-                const improve=Math.max(0,avgVal-keepVal);
-                u+=swing*(improve*70+(behind?75:15))-(late&&keepVal>=7?55:0); break;
-              }
-              case "sailor":{
-                const t=gc(e,"sailor"); if(!t||!t.length){u-=10;break}
-                const gain=(avgVal-keepVal); u+=swing*(gain*80+leaderTok*18)+(counterMoment?20:0); break;
-              }
-              case "spy":{
-                u+=((keepVal>=7&&!late)?85:15)+(behind?10:0); break;
-              }
-              case "captain": u-=25; break;
-              case "petty_thief": u+=(behind?45:15)+((e.deck?.length??0)>=5?10:0); break;
-            }
-            return u;
-          }
-
-          // Strong combo preference: ship_worker -> guard (if both) when not late
-          if(!late&&hand.includes("ship_worker")&&hand.includes("guard"))return Ji(e,hand.indexOf("ship_worker"));
-
-          const u0=utilityPlay(0),u1=utilityPlay(1);
-          return Ji(e,u1>u0?1:0);
-        }`;
-
-        const __jdAiE3 = `function e3(e,n){
-          const mem=window.__jd_ai_mem||(window.__jd_ai_mem={peek:{},lastPlayed:{}});
-          const me=e.players[e.currentPlayerIndex];
-          // leader by tokens
-          let leader=n[0],bestTok=-1;
-          for(const pid of n){const t=e.players[pid]?.tokens??0;if(t>bestTok){bestTok=t;leader=pid}}
-          const myCard=me?.hand?.[0]??null; const myVal=myCard?(Rt[myCard]??-1):-1;
-          // quick scoring by cardBeingPlayed
-          function sc(pid){
-            const p=e.players[pid]; if(!p||p.isEliminated)return-1e9;
-            const tok=p.tokens??0; const peek=mem.peek?.[pid]; const peekVal=peek?(Rt[peek]??-1):null;
-            switch(e.cardBeingPlayed){
-              case "guard": return (peek&&peek!=="guard"?1:0)*500 + tok*25 + (pid===leader?18:0);
-              case "swordsman": {
-                const win=peekVal!=null?(myVal>peekVal?1:0):0.5;
-                return win*220-(1-win)*100 + tok*16 + (pid===leader?18:0);
-              }
-              case "cannon": return tok*24 + (pid===leader?22:0) + ((Rt[mem.lastPlayed?.[pid]]??0)>=7?12:0);
-              case "sailor": {
-                const gain=peekVal!=null?(peekVal-myVal):0;
-                return gain*80 + tok*18 + (pid===leader?18:0);
-              }
-              case "ship_worker": return tok*14 + (pid===leader?14:0);
-              default: return tok*10 + (pid===leader?10:0);
-            }
-          }
-          const best=n.reduce((a,b)=>sc(b)>sc(a)?b:a,n[0]);
-          const r={...e,targetPlayerIndex:best};
-          return e.cardBeingPlayed==="guard"?lw(r,best):rw(r,best);
-        }`;
-
-        const __jdAiLw = `function lw(e,n){
-          const mem=window.__jd_ai_mem||(window.__jd_ai_mem={peek:{},played:{}});
-          try{const peek=mem.peek?.[n];if(peek&&peek!=="guard")return aw({...e,targetPlayerIndex:n},peek)}catch(_){}
-          const guess=["ship_worker","swordsman","cannon","merchant","sailor","captain","spy","pirate","petty_thief"];
-          const cc=window.__jdGetCardCounts?window.__jdGetCardCounts():{};
-          const base={...Jh,guard:cc.guard??Jh.guard,merchant:cc.merchant??Jh.merchant};
-          const used={};for(const p of e.players)for(const d of p.discardPile)used[d]=(used[d]??0)+1;
-          for(const h of (e.players[e.currentPlayerIndex]?.hand||[]))used[h]=(used[h]??0)+1;
-          const ids=Object.keys(base);let tot=0;const left={};
-          for(const id of ids){const v=Math.max(0,(base[id]??0)-(used[id]??0));left[id]=v;tot+=v}
-          const prob=id=>tot?(left[id]||0)/tot:0;
-          let best=-1,cands=[];
-          for(const id of guess){let p=prob(id);p+=Math.min(.25,((mem.played?.[n]?.[id])||0)*.06);if(p>best){best=p;cands=[id]}else if(p===best){cands.push(id)}}
-          if(!cands.length)cands=guess;
-          let __i=0;try{__i=__secureRandInt(cands.length)}catch(e){__i=0}const pick=cands[__i];
-          return aw({...e,targetPlayerIndex:n},pick);
-        }`;
-
-        const __jdAiJj = `function Jj(e){
-          const me=e.players[e.currentPlayerIndex];
-          const myTok=me?.tokens??0;
-          let bestTok=0;for(const p of e.players)if(p.id!==e.currentPlayerIndex&&!p.isEliminated)bestTok=Math.max(bestTok,p.tokens??0);
-          const behind=myTok<bestTok;
-          const late=(e.deck?.length??0)<=2;
-          function score(card){
-            if(!card)return-1e9;
-            if(card==="pirate")return-1e8;
-            let s=(Rt[card]??0)*14;
-            const swing=behind?1.25:0.85;
-            switch(card){
-              case "cannon": s+=swing*80; break;
-              case "sailor": s+=swing*55; break;
-              case "guard": s+=swing*50; break;
-              case "merchant": s+=swing*45; break;
-              case "spy": s+=((Rt[card]??0)>=7?40:15); break;
-              case "ship_worker": s+=behind?25:10; break;
-              case "petty_thief": s+=behind?18:6; break;
-              case "captain": s+=late?55:25; break;
-            }
-            if(late)s+=(Rt[card]??0)*10;
-            return s;
-          }
-          const opts=e.merchantOptions||[];
-          let bestIdx=0,best=-1e18;
-          for(let i=0;i<opts.length;i++){const sc=score(opts[i]);if(sc>best){best=sc;bestIdx=i}}
-          return ow(e,bestIdx);
-        }`;
-
-        code = code.replace(/function o3\(e\)\{[\s\S]*?\}(?=function)/, __jdAiO3);
-        code = code.replace(/function e3\(e,n\)\{[\s\S]*?\}(?=function)/, __jdAiE3);
-        code = code.replace(/function lw\(e,n\)\{[\s\S]*?\}(?=function)/, __jdAiLw);
-        code = code.replace(/function Jj\(e\)\{[\s\S]*?\}(?=function)/, __jdAiJj);
-      } catch {}
 
       // 12b) HARD mode: বেশি স্যাম্পলিং + বেশি আক্রমণাত্মক স্কোরিং (অফলাইন AI)
       try {
@@ -847,39 +622,14 @@
         'function o3(e){const me=e.players[e.currentPlayerIndex],hand=me.hand;if(Wd(hand))return Ji(e,hand.indexOf(\"captain\"));const cc=typeof window!==\"undefined\"&&window.__jdGetCardCounts?window.__jdGetCardCounts():{};const base={...Jh,guard:cc.guard??Jh.guard,merchant:cc.merchant??Jh.merchant};const used={};for(const p of e.players)for(const d of p.discardPile)used[d]=(used[d]??0)+1;for(const h of hand)used[h]=(used[h]??0)+1;const ids=Object.keys(base);let tot=0;const left={};for(const id of ids){const v=Math.max(0,(base[id]??0)-(used[id]??0));left[id]=v;tot+=v}const mem=window.__jd_ai_mem||(window.__jd_ai_mem={snap:null,played:{},agg:{}});(function observe(){try{if(!mem.snap||mem.snap.length!==e.players.length){mem.snap=e.players.map(p=>p.discardPile?p.discardPile.length:0)}for(let pid=0;pid<e.players.length;pid++){const p=e.players[pid];const old=mem.snap[pid]??0;const cur=p.discardPile?p.discardPile.length:0;if(cur>old){const newCards=p.discardPile.slice(old);mem.played[pid]=mem.played[pid]||{};for(const c of newCards){mem.played[pid][c]=(mem.played[pid][c]||0)+1;const v=Rt[c]??0;mem.agg[pid]=(mem.agg[pid]||0)+Math.max(0,v-3)}mem.snap[pid]=cur}}}catch(e){}})();function pickFromLeft(){if(tot<=0)return ids[0];let r=__secureRandInt(tot);for(const id of ids){r-=left[id]||0;if(r<0)return id}return ids[0]}function estBestOfTwo(samples){if(tot<=0)return 0;let sum=0;for(let i=0;i<samples;i++){const a=pickFromLeft(),b=pickFromLeft();sum+=Math.max(Rt[a]??0,Rt[b]??0)}return sum/samples}const avgBest=estBestOfTwo(28);function probLess(val){if(tot<=0)return.5;let s=0;for(const id of ids){const pv=(left[id]||0)/tot;if((Rt[id]??-1)<val)s+=pv}return s}function needTargets(cardId){return r3.includes(cardId)&&cardId!==\"cannon\"}function aliveTargets(cardId){const t=gc(e,cardId)||[];return Array.isArray(t)?t:[]}function riskFactor(){try{let a=0,c=0;for(const k in mem.agg){a+=mem.agg[k]||0;c++}return c?Math.min(1.6,1+a/(c*18)):1}catch{return 1}}const rf=riskFactor();function score(cardId,other){const ov=other?Rt[other]:-1;const haveTargets=!needTargets(cardId)||aliveTargets(cardId).length>0||cardId===\"cannon\";if(!haveTargets&&r3.includes(cardId))return-1e9;let sc=0;switch(cardId){case\"pirate\":sc=-1e9;break;case\"swordsman\":{if(ov<=3)sc=-1e9;else{const wp=probLess(ov);sc=35+wp*95+ov*2.5}break}case\"cannon\":sc=60+(ov>=7?12:0);break;case\"sailor\":sc=(ov<=3?64:28)+(ov<=1?12:0);break;case\"guard\":sc=52+(ov>=7?10:0);break;case\"merchant\":{const need=ov<=3?1.35:1.0;sc=42+avgBest*6.5*need;break}case\"spy\":sc=(ov>=7?58:22);break;case\"ship_worker\":sc=38+(ov>=7?6:0);break;case\"petty_thief\":sc=26;break;case\"captain\":sc=12;break;default:sc=18}sc+=Math.max(0,ov);return sc*rf}let bestIdx=0,best=-1e9;for(let i=0;i<hand.length;i++){const card=hand[i];const other=hand[i===0?1:0];const s=score(card,other);if(s>best){best=s;bestIdx=i}}return Ji(e,bestIdx)}';
       if (code.includes(oldAiTakeTurn)) code = code.replace(oldAiTakeTurn, newAiTakeTurn);
 
-        // Load patched bundle via <script type="module" src="blob:..."> (more compatible than dynamic import on some browsers)
-        const blobUrl = URL.createObjectURL(new Blob([code], { type: "text/javascript" }));
-        window.__jd_patch_applied = false;
-        await new Promise((resolve, reject) => {
-          const s = document.createElement("script");
-          s.type = "module";
-          s.src = blobUrl;
-          s.onload = () => {
-            window.__jd_patch_applied = true;
-            try { URL.revokeObjectURL(blobUrl); } catch {}
-            resolve();
-          };
-          s.onerror = (e) => {
-            try { URL.revokeObjectURL(blobUrl); } catch {}
-            reject(e);
-          };
-          document.head.appendChild(s);
-        });
-      } catch (err) {
-        // Fallback: runtime patch ব্যর্থ হলে (কিছু ব্রাউজারে SyntaxError ইত্যাদি),
-        // অন্তত গেমটা যেন ব্ল্যাঙ্ক না থাকে—মূল bundle সরাসরি লোড করা হবে।
-        console.warn("JD runtime patch failed; falling back to original bundle.", err);
-        await new Promise((resolve, reject) => {
-          const s = document.createElement("script");
-          s.type = "module";
-          s.src = entryUrl.href;
-          s.onload = resolve;
-          s.onerror = reject;
-          document.head.appendChild(s);
-        });
+      const blobUrl = URL.createObjectURL(new Blob([code], { type: "text/javascript" }));
+      try {
+        await import(blobUrl);
+      } finally {
+        URL.revokeObjectURL(blobUrl);
       }
     </script>
-    <link rel="stylesheet" crossorigin href="./assets/index-CVHLiWwd.css?v=18">
+    <link rel="stylesheet" crossorigin href="./assets/index-CVHLiWwd.css?v=17">
   </head>
   <body>
     <div id="root"></div>
