@@ -167,6 +167,7 @@
         });
       })();
 
+      /*
       const entryUrl = new URL("./assets/index-Er7WoFSS.js?v=17", import.meta.url);
       const res = await fetch(entryUrl);
       let code = await res.text();
@@ -852,6 +853,11 @@
       } finally {
         URL.revokeObjectURL(blobUrl);
       }
+      */
+
+      // অ্যাপের মেইন JS বাণ্ডেল লোড (runtime patch বাদ দিয়ে) — নইলে কিছু ব্রাউজারে
+      // “Identifier 'sc' has already been declared” এরর হয়ে ব্ল্যাঙ্ক স্ক্রিন দেখা যায়।
+      import "./assets/index-Er7WoFSS.js?v=17";
     </script>
     <link rel="stylesheet" crossorigin href="./assets/index-CVHLiWwd.css?v=17">
   </head>
