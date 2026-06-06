@@ -6,10 +6,17 @@ import { randomInt as cryptoRandomInt, randomBytes, createHash } from "node:cryp
 function randInt(maxExclusive) {
   if (maxExclusive <= 0) return 0;
   try {
-    // cryptoRandomInt is unbiased and much stronger than Math.random().
+    // cryptoRandomInt is unbiased and cryptographically strong.
     return cryptoRandomInt(0, maxExclusive);
   } catch {
-    return Math.floor(Math.random() * maxExclusive);
+    // Fallback: rejection sampling from randomBytes (still CSPRNG).
+    const mod = 4294967296;
+    const limit = mod - mod % maxExclusive;
+    for (let attempt = 0; attempt < 20; attempt++) {
+      const v = randomBytes(4).readUInt32BE(0);
+      if (v < limit) return v % maxExclusive;
+    }
+    return randomBytes(4).readUInt32BE(0) % maxExclusive;
   }
 }
 
