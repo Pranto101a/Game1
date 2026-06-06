@@ -9,7 +9,19 @@ function randInt(maxExclusive) {
     // cryptoRandomInt is unbiased and much stronger than Math.random().
     return cryptoRandomInt(0, maxExclusive);
   } catch {
-    return Math.floor(Math.random() * maxExclusive);
+    // Fallback without Math.random(): unbiased sampling from randomBytes
+    try {
+      const mod = 4294967296;
+      const limit = mod - mod % maxExclusive;
+      for (let attempt = 0; attempt < 50; attempt++) {
+        const v = randomBytes(4).readUInt32BE(0);
+        if (v < limit) return v % maxExclusive;
+      }
+      // last resort (still crypto-based)
+      return randomBytes(4).readUInt32BE(0) % maxExclusive;
+    } catch {
+      return 0;
+    }
   }
 }
 
