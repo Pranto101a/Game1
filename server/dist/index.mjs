@@ -352,7 +352,8 @@ function initGame(configs, online, cardCountsOverride, tokensToWinOverride) {
     pfCommit: baseState.pfCommit,
     pfReveal: null,
     pfSeed: baseState.pfSeed,
-    pfCounter: baseState.pfCounter
+    pfCounter: baseState.pfCounter,
+    botMem: {}
   };
 }
 function beginTurn(state) {
@@ -378,6 +379,9 @@ function beginTurn(state) {
   );
   const player = players[idx];
   const step = player.isHuman ? "select_card" : "ai_turn";
+  // This player's hand changed (drew + will play) → stale bot memory about them must be cleared.
+  const memCleared = { ...(state.botMem ?? {}) };
+  delete memCleared[idx];
   return addLog(
     {
       ...state,
@@ -390,7 +394,8 @@ function beginTurn(state) {
       merchantOptions: null,
       peekCard: null,
       resultMessage: "",
-      playStep: step
+      playStep: step,
+      botMem: memCleared
     },
     `${player.name}-\u098F\u09B0 \u09AA\u09BE\u09B2\u09BE\u0964`
   );
@@ -503,8 +508,12 @@ function resolveWithTarget(state, targetIdx) {
     const target = s.players[targetIdx];
     const peekCard = target.hand[0] ?? null;
     const msg = `${s.players[s.currentPlayerIndex].name} ${target.name}-\u098F\u09B0 \u0995\u09BE\u09B0\u09CD\u09A1 \u09A6\u09C7\u0996\u09C7\u099B\u09C7\u09A8\u0964`;
+    // If attacker is a bot, remember the peeked card for future smart play.
+    let s2 = s;
+    const attacker = s.players[s.currentPlayerIndex];
+    if (attacker && !attacker.isHuman && peekCard) s2 = setMem(s, targetIdx, peekCard);
     return addLog(
-      { ...s, peekCard, resultMessage: `${target.name}-\u098F\u09B0 \u09B9\u09BE\u09A4\u09C7 \u0986\u099B\u09C7: ${peekCard ? CARD_NAMES_BN[peekCard] : "???"}`, playStep: "peek_result" },
+      { ...s2, peekCard, resultMessage: `${target.name}-\u098F\u09B0 \u09B9\u09BE\u09A4\u09C7 \u0986\u099B\u09C7: ${peekCard ? CARD_NAMES_BN[peekCard] : "???"}`, playStep: "peek_result" },
       msg
     );
   }
@@ -591,7 +600,10 @@ function resolveCannon(state, targetIdx) {
       }
     }
   }
-  const s = addLog({ ...st2, players, deck, drawHistory: dh, resultMessage: msg }, msg);
+  // Cannon changed target's card → invalidate any memory bots had about them.
+  let sCM = { ...st2, players, deck, drawHistory: dh, resultMessage: msg };
+  sCM = clearMem(sCM, targetIdx);
+  const s = addLog(sCM, msg);
   return { ...s, playStep: "show_result" };
 }
 function resolveSailor(state, targetIdx) {
@@ -605,12 +617,139 @@ function resolveSailor(state, targetIdx) {
     return p;
   });
   const msg = `${attacker.name} ${target.name}-\u098F\u09B0 \u09B8\u09BE\u09A5\u09C7 \u09B9\u09BE\u09A4 \u09AC\u09A6\u09B2 \u0995\u09B0\u09C7\u099B\u09C7\u09A8!`;
-  const s = addLog({ ...state, players, resultMessage: msg }, msg);
+  // After swap: bots involved gain perfect info about the other player's new hand.
+  let s = { ...state, players, resultMessage: msg };
+  // Attacker now holds target's old card; target now holds attacker's old card (single-card hand each).
+  const targetOldCard = targetHand[0] ?? null;
+  const attackerOldCard = attackerHand[0] ?? null;
+  if (!attacker.isHuman && attackerOldCard) s = setMem(s, targetIdx, attackerOldCard);
+  else s = clearMem(s, targetIdx);
+  if (!target.isHuman && targetOldCard) s = setMem(s, state.currentPlayerIndex, targetOldCard);
+  else s = clearMem(s, state.currentPlayerIndex);
+  s = addLog(s, msg);
   return { ...s, playStep: "show_result" };
 }
+// ======================= SMART AI HELPERS =======================
+function getUnseenCounts(state, selfIdx) {
+  const counts = { ...(state.cardCounts ?? DEFAULT_CARD_COUNTS) };
+  for (const p of state.players) {
+    for (const d of p.discardPile) counts[d] = (counts[d] ?? 0) - 1;
+  }
+  const self = state.players[selfIdx];
+  if (self) for (const c of self.hand) counts[c] = (counts[c] ?? 0) - 1;
+  // Known opponent cards (from peeks etc) also reduce unseen pool
+  const mem = state.botMem ?? {};
+  for (const k of Object.keys(mem)) {
+    const idx = Number(k);
+    if (idx === selfIdx) continue;
+    const known = mem[k];
+    if (known) counts[known] = (counts[known] ?? 0) - 1;
+  }
+  for (const k of Object.keys(counts)) if (counts[k] < 0) counts[k] = 0;
+  return counts;
+}
+function totalCount(counts) {
+  let t = 0; for (const k of Object.keys(counts)) t += counts[k] ?? 0; return t;
+}
+function knownCard(state, idx) {
+  const mem = state.botMem ?? {};
+  return mem[idx] ?? null;
+}
+// Probability distribution for opponent oppIdx from selfIdx POV.
+function oppDist(state, selfIdx, oppIdx) {
+  const known = knownCard(state, oppIdx);
+  if (known) return { [known]: 1 };
+  const counts = getUnseenCounts(state, selfIdx);
+  const total = totalCount(counts);
+  if (total <= 0) return {};
+  const out = {};
+  for (const k of Object.keys(counts)) if (counts[k] > 0) out[k] = counts[k] / total;
+  return out;
+}
+function expectedValue(dist) {
+  let e = 0; for (const k of Object.keys(dist)) e += (CARD_VALUES[k] ?? 0) * dist[k]; return e;
+}
+function probHigherThan(dist, val) {
+  let p = 0; for (const k of Object.keys(dist)) if ((CARD_VALUES[k] ?? 0) > val) p += dist[k]; return p;
+}
+function probEqualOrHigher(dist, val) {
+  let p = 0; for (const k of Object.keys(dist)) if ((CARD_VALUES[k] ?? 0) >= val) p += dist[k]; return p;
+}
+function probIs(dist, card) { return dist[card] ?? 0; }
+function setMem(state, idx, card) {
+  const mem = { ...(state.botMem ?? {}) };
+  mem[idx] = card;
+  return { ...state, botMem: mem };
+}
+function clearMem(state, idx) {
+  const mem = { ...(state.botMem ?? {}) };
+  delete mem[idx];
+  return { ...state, botMem: mem };
+}
+function clearAllMem(state) { return { ...state, botMem: {} }; }
+
+function listOpponents(state, selfIdx, requireTargetable) {
+  return state.players
+    .map((p, i) => ({ p, i }))
+    .filter(({ p, i }) => i !== selfIdx && !p.isEliminated && (!requireTargetable || !p.isProtected))
+    .map(({ i }) => i);
+}
+
+function pickBestGuardTarget(state, selfIdx) {
+  const opps = listOpponents(state, selfIdx, true);
+  if (opps.length === 0) return null;
+  // Prefer opponents we have memory of (likely guaranteed kill), else opp with highest tokens
+  let best = opps[0]; let bestScore = -Infinity;
+  for (const idx of opps) {
+    let score = 0;
+    if (knownCard(state, idx) && knownCard(state, idx) !== "guard") score += 1000;
+    score += (state.players[idx].tokens ?? 0) * 5;
+    if (score > bestScore) { bestScore = score; best = idx; }
+  }
+  return best;
+}
+function pickBestThreatTarget(state, selfIdx) {
+  // Target whoever has the highest expected card value (most threatening) and tokens
+  const opps = listOpponents(state, selfIdx, true);
+  if (opps.length === 0) return null;
+  let best = opps[0]; let bestScore = -Infinity;
+  for (const idx of opps) {
+    const dist = oppDist(state, selfIdx, idx);
+    const ev = expectedValue(dist);
+    const score = ev * 10 + (state.players[idx].tokens ?? 0) * 3;
+    if (score > bestScore) { bestScore = score; best = idx; }
+  }
+  return best;
+}
+
 function aiMerchantSelect(state) {
   const options = state.merchantOptions;
-  const best = options.reduce((a, b) => CARD_VALUES[a] >= CARD_VALUES[b] ? a : b);
+  // Never keep pirate (auto-lose if discarded later by cannon).
+  const nonPirate = options.filter((c) => c !== "pirate");
+  const pool = nonPirate.length > 0 ? nonPirate : options;
+  // Late game (few cards left): prefer mid-value cards to survive showdown. Otherwise pick highest playable value.
+  const deckSize = state.deck?.length ?? 0;
+  let best;
+  if (deckSize <= 1) {
+    // Showdown looming: keep the highest card.
+    best = pool.reduce((a, b) => (CARD_VALUES[a] >= CARD_VALUES[b] ? a : b));
+  } else {
+    // Otherwise prefer cards that are powerful to play (cannon/sailor/swordsman/guard memory),
+    // but avoid keeping captain when we have neither cannon nor sailor next (it's dead weight),
+    // and avoid keeping spy if we're already protected. Use a utility score.
+    const scoreCard = (c) => {
+      const v = CARD_VALUES[c] ?? 0;
+      let s = v;
+      if (c === "guard") s += 1; // flexible
+      if (c === "ship_worker") s += 1;
+      if (c === "spy") s += 2; // protection is great
+      if (c === "merchant") s += 1;
+      if (c === "captain") s -= 1; // captain alone is passive
+      if (c === "petty_thief") s -= 2; // weak unless solo thief
+      return s;
+    };
+    best = pool.reduce((a, b) => (scoreCard(a) >= scoreCard(b) ? a : b));
+  }
   const keptIdx = options.indexOf(best);
   return merchantSelect(state, keptIdx);
 }
@@ -635,36 +774,77 @@ function merchantSelect(state, keepIndex) {
   return { ...s, playStep: "show_result" };
 }
 function aiSelectTarget(state, validTargets) {
-  const targetIdx = validTargets.reduce((best, cur) => {
-    const bt = state.players[best]?.tokens ?? 0;
-    const ct = state.players[cur]?.tokens ?? 0;
-    return ct > bt ? cur : best;
-  }, validTargets[0]);
-  const s = { ...state, targetPlayerIndex: targetIdx };
-  if (state.cardBeingPlayed === "guard") {
-    return aiGuardGuess(s, targetIdx);
+  const selfIdx = state.currentPlayerIndex;
+  const me = state.players[selfIdx];
+  const cardBeing = state.cardBeingPlayed;
+  const myOther = me.hand[0];
+  const myVal = myOther ? (CARD_VALUES[myOther] ?? 0) : 0;
+  let targetIdx;
+  if (cardBeing === "guard") {
+    targetIdx = pickBestGuardTarget(state, selfIdx) ?? validTargets[0];
+    if (!validTargets.includes(targetIdx)) targetIdx = validTargets[0];
+    return aiGuardGuess({ ...state, targetPlayerIndex: targetIdx }, targetIdx);
   }
-  return resolveWithTarget(s, targetIdx);
+  if (cardBeing === "cannon") {
+    let best = null; let bestScore = -Infinity;
+    for (const idx of validTargets) {
+      if (idx === selfIdx) {
+        const onlyOption = validTargets.length === 1;
+        const score = onlyOption ? 0 : (myVal <= 1 ? -5 : -50);
+        if (score > bestScore) { bestScore = score; best = idx; }
+        continue;
+      }
+      const known = knownCard(state, idx);
+      if (known === "pirate") return resolveWithTarget({ ...state, targetPlayerIndex: idx }, idx);
+      const dist = oppDist(state, selfIdx, idx);
+      let score = expectedValue(dist) * 10 + (state.players[idx].tokens ?? 0) * 4;
+      score += (dist["pirate"] ?? 0) * 500;
+      if (score > bestScore) { bestScore = score; best = idx; }
+    }
+    targetIdx = best ?? validTargets[0];
+    return resolveWithTarget({ ...state, targetPlayerIndex: targetIdx }, targetIdx);
+  }
+  if (cardBeing === "swordsman") {
+    let best = validTargets[0]; let bestProb = -1;
+    for (const idx of validTargets) {
+      const dist = oppDist(state, selfIdx, idx);
+      let pWin = 0; for (const k of Object.keys(dist)) if ((CARD_VALUES[k] ?? 0) < myVal) pWin += dist[k];
+      if (pWin > bestProb) { bestProb = pWin; best = idx; }
+    }
+    return resolveWithTarget({ ...state, targetPlayerIndex: best }, best);
+  }
+  if (cardBeing === "sailor") {
+    let best = validTargets[0]; let bestEV = -Infinity;
+    for (const idx of validTargets) {
+      const ev = expectedValue(oppDist(state, selfIdx, idx));
+      if (ev > bestEV) { bestEV = ev; best = idx; }
+    }
+    return resolveWithTarget({ ...state, targetPlayerIndex: best }, best);
+  }
+  // ship_worker default: pick high-token opp we don't already know
+  let best = validTargets[0]; let bestScore = -Infinity;
+  for (const idx of validTargets) {
+    const known = knownCard(state, idx) ? 1 : 0;
+    const score = -known * 100 + (state.players[idx].tokens ?? 0) * 5 + expectedValue(oppDist(state, selfIdx, idx));
+    if (score > bestScore) { bestScore = score; best = idx; }
+  }
+  return resolveWithTarget({ ...state, targetPlayerIndex: best }, best);
 }
 function aiGuardGuess(state, targetIdx) {
+  const selfIdx = state.currentPlayerIndex;
   const guessable = ["ship_worker", "swordsman", "cannon", "merchant", "sailor", "captain", "spy", "pirate", "petty_thief"];
-  const used = {};
-  for (const p of state.players) for (const d of p.discardPile) used[d] = (used[d] ?? 0) + 1;
-  const counts = state.cardCounts ?? DEFAULT_CARD_COUNTS;
-  let bestLeft = -1;
-  let candidates = [];
-  for (const id of guessable) {
-    const left = (counts[id] ?? 0) - (used[id] ?? 0);
-    if (left > bestLeft) {
-      bestLeft = left;
-      candidates = [id];
-    } else if (left === bestLeft) {
-      candidates.push(id);
-    }
+  const known = knownCard(state, targetIdx);
+  if (known && guessable.includes(known)) {
+    return resolveGuard({ ...state, targetPlayerIndex: targetIdx }, known);
   }
-  const pickFrom = candidates.length ? candidates : guessable;
-  const guess = pickFrom[randInt(pickFrom.length)];
-  return resolveGuard({ ...state, targetPlayerIndex: targetIdx }, guess);
+  const dist = oppDist(state, selfIdx, targetIdx);
+  let best = null; let bestP = -1;
+  for (const id of guessable) {
+    const p = dist[id] ?? 0;
+    if (p > bestP) { bestP = p; best = id; }
+  }
+  if (!best) best = guessable[randInt(guessable.length)];
+  return resolveGuard({ ...state, targetPlayerIndex: targetIdx }, best);
 }
 function acknowledgeResult(state) {
   return resolveEndOfPlay(state);
@@ -787,56 +967,151 @@ function startNewRound(state, firstPlayerIdx) {
     pfReveal: null,
     pfSeed: pf.pfSeed,
     pfCounter: pf.pfCounter,
+    botMem: {},
     log: [`\u09B0\u09BE\u0989\u09A8\u09CD\u09A1 ${round} \u09B6\u09C1\u09B0\u09C1!`, `\u09B6\u09BE\u09AB\u09B2 \u09B9\u09CD\u09AF\u09BE\u09B6: ${pf.pfCommit.slice(0, 16)}`, ...state.log]
   };
 }
 
 // ../pirate-card-game/lib/game-engine/src/game-ai.ts
 var TARGET_CARDS = ["guard", "ship_worker", "swordsman", "cannon", "sailor"];
-var PLAY_PRIORITY = [
-  "guard",
-  "ship_worker",
-  "swordsman",
-  "cannon",
-  "merchant",
-  "sailor",
-  "spy",
-  "captain",
-  "petty_thief"
-];
+// Heuristic scoring per card option. Larger = better play right now.
+function scoreCardPlay(state, selfIdx, cardId, otherCard) {
+  const otherVal = otherCard ? (CARD_VALUES[otherCard] ?? 0) : -1;
+  const opps = listOpponents(state, selfIdx, true);
+  const allOpps = listOpponents(state, selfIdx, false);
+  const counts = getUnseenCounts(state, selfIdx);
+  const total = totalCount(counts) || 1;
+  const deckSize = state.deck?.length ?? 0;
+  const late = deckSize <= Math.max(2, state.players.length);
+  switch (cardId) {
+    case "pirate": return -10000; // never voluntarily play
+    case "petty_thief": {
+      // Only player to play it = bonus token if survive. Slight bonus when our other card is weak (we're losing showdown anyway).
+      let s = 5;
+      if (otherVal <= 2) s += 8;
+      if (otherVal >= 6) s -= 5; // wasteful with a strong other card
+      // If others already played thief this round, less unique value
+      const others = state.players.some((p, i) => i !== selfIdx && p.playedThiefThisRound);
+      if (others) s -= 4;
+      return s;
+    }
+    case "spy": {
+      // Protection: best when our other card is mid/high (worth defending) or many threats around
+      let s = 10;
+      if (otherVal >= 6) s += 20;
+      else if (otherVal >= 4) s += 10;
+      if (state.players[selfIdx].isProtected) s -= 5;
+      const threats = opps.length;
+      s += threats * 2;
+      return s;
+    }
+    case "guard": {
+      if (opps.length === 0) return -5;
+      // Find target prob we can kill
+      let bestKill = 0;
+      for (const oi of opps) {
+        const known = knownCard(state, oi);
+        if (known && known !== "guard") return 200; // guaranteed kill
+        const d = oppDist(state, selfIdx, oi);
+        let maxP = 0; for (const k of Object.keys(d)) if (k !== "guard" && d[k] > maxP) maxP = d[k];
+        if (maxP > bestKill) bestKill = maxP;
+      }
+      // Base utility + expected kill value
+      return 8 + bestKill * 40;
+    }
+    case "ship_worker": {
+      if (opps.length === 0) return -5;
+      // Best when we don't know any opponent and have a strong card to defend with
+      const knownCount = opps.filter((i) => knownCard(state, i)).length;
+      let s = 18 - knownCount * 6;
+      if (otherVal >= 5) s += 4; // info matters if we'll survive
+      return s;
+    }
+    case "swordsman": {
+      if (opps.length === 0) return -10;
+      // Avg win prob across opps, weighted toward best target
+      let bestWin = 0;
+      for (const oi of opps) {
+        const d = oppDist(state, selfIdx, oi);
+        let pWin = 0; for (const k of Object.keys(d)) if ((CARD_VALUES[k] ?? 0) < otherVal) pWin += d[k];
+        if (pWin > bestWin) bestWin = pWin;
+      }
+      // Bias: if we don't have at least ~55% win chance, dangerous
+      if (bestWin < 0.5) return -5 + bestWin * 10;
+      return 6 + bestWin * 30;
+    }
+    case "cannon": {
+      // Hit highest-EV target; if forced self-cannon (all protected) only OK if our other card is weak
+      const targets = listOpponents(state, selfIdx, true);
+      if (targets.length === 0) {
+        // Only self-target valid
+        if (otherVal <= 2) return 4;
+        if (otherVal === 9) return -200; // pirate self-cannon = elimination
+        return -15;
+      }
+      // Bonus if any known pirate holder
+      const knownPirate = targets.some((i) => knownCard(state, i) === "pirate");
+      let s = 12;
+      if (knownPirate) s += 80;
+      // Avg pirate-bust chance across targets
+      let bustChance = 0;
+      for (const oi of targets) {
+        const d = oppDist(state, selfIdx, oi);
+        bustChance += d["pirate"] ?? 0;
+      }
+      s += bustChance * 50;
+      return s;
+    }
+    case "merchant": {
+      // Lets us pick best of 3 — useful if our other card is weak
+      let s = 10;
+      if (otherVal <= 2) s += 8;
+      if (deckSize >= 3) s += 2;
+      return s;
+    }
+    case "sailor": {
+      if (opps.length === 0) return -5;
+      // Beneficial when opp's expected card is higher than ours
+      let bestGain = -10;
+      for (const oi of opps) {
+        const ev = expectedValue(oppDist(state, selfIdx, oi));
+        const gain = ev - otherVal;
+        if (gain > bestGain) bestGain = gain;
+      }
+      let s = 4 + bestGain * 4;
+      // Don't sailor if we already hold a winning card late game
+      if (late && otherVal >= 6) s -= 10;
+      return s;
+    }
+    case "captain": {
+      // No effect. Play it only as last resort (low score) — but mustPlayCaptain handles forced case.
+      // Captain alone (value 8) is often worth saving for compare.
+      if (otherVal >= 8) return -20; // keep both? actually impossible, two captains not in deck normally
+      if (otherVal <= 2) return -8;
+      return -3;
+    }
+  }
+  return 0;
+}
 function aiTakeTurn(state) {
-  const player = state.players[state.currentPlayerIndex];
+  const selfIdx = state.currentPlayerIndex;
+  const player = state.players[selfIdx];
   const hand = player.hand;
-  if (mustPlayCaptain(hand)) {
-    return playCard(state, hand.indexOf("captain"));
-  }
-  for (const cardId of PLAY_PRIORITY) {
-    const idx = hand.indexOf(cardId);
-    if (idx === -1) continue;
-    // Smarter swordsman: only play if our remaining card is reasonably strong.
-    // Otherwise it's often suicidal (you'll lose the compare).
-    if (cardId === "swordsman" && hand.length === 2) {
-      const other = hand[idx === 0 ? 1 : 0];
-      const otherVal = other ? CARD_VALUES[other] : -1;
-      if (otherVal <= 3) continue;
+  if (mustPlayCaptain(hand)) return playCard(state, hand.indexOf("captain"));
+  // Score every legal card in hand
+  let bestIdx = 0; let bestScore = -Infinity;
+  for (let i = 0; i < hand.length; i++) {
+    const cardId = hand[i];
+    const other = hand[1 - i];
+    let score = scoreCardPlay(state, selfIdx, cardId, other);
+    // If a targeted card has zero valid targets and it's not cannon, fall through to "no-op" effect
+    if (TARGET_CARDS.includes(cardId) && cardId !== "cannon") {
+      const t = getValidTargets(state, cardId);
+      if (t.length === 0) score = Math.min(score, 0) - 1; // not great but legal
     }
-    if (TARGET_CARDS.includes(cardId)) {
-      const targets = getValidTargets(state, cardId);
-      if (targets.length > 0) return playCard(state, idx);
-      if (cardId === "cannon") return playCard(state, idx);
-    } else {
-      return playCard(state, idx);
-    }
+    if (score > bestScore) { bestScore = score; bestIdx = i; }
   }
-  const best = hand.reduce(
-    (acc, c, i) => {
-      if (c === "pirate") return acc;
-      const v = CARD_VALUES[c];
-      return v < acc.val ? { idx: i, val: v } : acc;
-    },
-    { idx: 0, val: Infinity }
-  );
-  return playCard(state, best.val === Infinity ? 0 : best.idx);
+  return playCard(state, bestIdx);
 }
 
 // entry.ts
@@ -863,6 +1138,7 @@ function stripServerSecrets(state) {
     // It will be revealed via pfReveal after round_end/game_end.
     delete s.pfSeed;
     delete s.pfCounter;
+    delete s.botMem;
     return s;
   } catch {
     return state;
