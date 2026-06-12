@@ -167,7 +167,7 @@
         });
       })();
 
-      const entryUrl = new URL("./assets/index-Er7WoFSS.js?v=17", import.meta.url);
+      const entryUrl = new URL("./assets/index-Er7WoFSS.js?v=18", import.meta.url);
       const res = await fetch(entryUrl);
       let code = await res.text();
 
@@ -631,6 +631,76 @@
         'function o3(e){const me=e.players[e.currentPlayerIndex],hand=me.hand;if(Wd(hand))return Ji(e,hand.indexOf(\"captain\"));const cc=typeof window!==\"undefined\"&&window.__jdGetCardCounts?window.__jdGetCardCounts():{};const base={...Jh,guard:cc.guard??Jh.guard,merchant:cc.merchant??Jh.merchant};const used={};for(const p of e.players)for(const d of p.discardPile)used[d]=(used[d]??0)+1;for(const h of hand)used[h]=(used[h]??0)+1;const ids=Object.keys(base);let tot=0;const left={};for(const id of ids){const v=Math.max(0,(base[id]??0)-(used[id]??0));left[id]=v;tot+=v}const mem=window.__jd_ai_mem||(window.__jd_ai_mem={snap:null,played:{},agg:{}});(function observe(){try{if(!mem.snap||mem.snap.length!==e.players.length){mem.snap=e.players.map(p=>p.discardPile?p.discardPile.length:0)}for(let pid=0;pid<e.players.length;pid++){const p=e.players[pid];const old=mem.snap[pid]??0;const cur=p.discardPile?p.discardPile.length:0;if(cur>old){const newCards=p.discardPile.slice(old);mem.played[pid]=mem.played[pid]||{};for(const c of newCards){mem.played[pid][c]=(mem.played[pid][c]||0)+1;const v=Rt[c]??0;mem.agg[pid]=(mem.agg[pid]||0)+Math.max(0,v-3)}mem.snap[pid]=cur}}}catch(e){}})();function pickFromLeft(){if(tot<=0)return ids[0];let r=__secureRandInt(tot);for(const id of ids){r-=left[id]||0;if(r<0)return id}return ids[0]}function estBestOfTwo(samples){if(tot<=0)return 0;let sum=0;for(let i=0;i<samples;i++){const a=pickFromLeft(),b=pickFromLeft();sum+=Math.max(Rt[a]??0,Rt[b]??0)}return sum/samples}const avgBest=estBestOfTwo(28);function probLess(val){if(tot<=0)return.5;let s=0;for(const id of ids){const pv=(left[id]||0)/tot;if((Rt[id]??-1)<val)s+=pv}return s}function needTargets(cardId){return r3.includes(cardId)&&cardId!==\"cannon\"}function aliveTargets(cardId){const t=gc(e,cardId)||[];return Array.isArray(t)?t:[]}function riskFactor(){try{let a=0,c=0;for(const k in mem.agg){a+=mem.agg[k]||0;c++}return c?Math.min(1.6,1+a/(c*18)):1}catch{return 1}}const rf=riskFactor();function score(cardId,other){const ov=other?Rt[other]:-1;const haveTargets=!needTargets(cardId)||aliveTargets(cardId).length>0||cardId===\"cannon\";if(!haveTargets&&r3.includes(cardId))return-1e9;let sc=0;switch(cardId){case\"pirate\":sc=-1e9;break;case\"swordsman\":{if(ov<=3)sc=-1e9;else{const wp=probLess(ov);sc=35+wp*95+ov*2.5}break}case\"cannon\":sc=60+(ov>=7?12:0);break;case\"sailor\":sc=(ov<=3?64:28)+(ov<=1?12:0);break;case\"guard\":sc=52+(ov>=7?10:0);break;case\"merchant\":{const need=ov<=3?1.35:1.0;sc=42+avgBest*6.5*need;break}case\"spy\":sc=(ov>=7?58:22);break;case\"ship_worker\":sc=38+(ov>=7?6:0);break;case\"petty_thief\":sc=26;break;case\"captain\":sc=12;break;default:sc=18}sc+=Math.max(0,ov);return sc*rf}let bestIdx=0,best=-1e9;for(let i=0;i<hand.length;i++){const card=hand[i];const other=hand[i===0?1:0];const s=score(card,other);if(s>best){best=s;bestIdx=i}}return Ji(e,bestIdx)}';
       if (code.includes(oldAiTakeTurn)) code = code.replace(oldAiTakeTurn, newAiTakeTurn);
 
+      // ============================================================
+      // === v18 patches: sound cleanup + elimination-loop bug fix ===
+      // ============================================================
+
+      // 14) FIX: Online — elimination sound (sw) fires on EVERY card show after
+      // any player is eliminated, because the "C" counter is parsed from a key
+      // that never contains "elim-". Replace with a persistent ref on window.
+      const oldElimOnline =
+        'const Y=`card-${M}-${n.round}-${n.currentPlayerIndex}`;if(W.current!==Y){W.current=Y,tw(M);const ne=n.players.filter(F=>F.isEliminated).length,C=Number(W.current.split("elim-")[1]??0);ne>C&&sw()}';
+      const newElimOnline =
+        'const Y=`card-${M}-${n.round}-${n.currentPlayerIndex}`;if(W.current!==Y){W.current=Y,tw(M);const ne=n.players.filter(F=>F.isEliminated).length;const __prev=window.__jd_online_elim_count||0;if(ne>__prev){window.__jd_online_elim_count=ne}}';
+      if (code.includes(oldElimOnline)) code = code.replace(oldElimOnline, newElimOnline);
+
+      // 14b) Online — only play winner sound at game_end, reset elim counter between rounds.
+      const oldOnlineRoundReset =
+        'if(Q==="round_end"||Q==="game_end"){const Y=`win-${Q}-${n.round}`;W.current!==Y&&(W.current=Y,nw())}';
+      const newOnlineRoundReset =
+        'if(Q==="round_end"||Q==="game_end"){const Y=`win-${Q}-${n.round}`;if(W.current!==Y){W.current=Y;if(Q==="game_end"){try{__jdWinnerSfx()}catch(e){}}}window.__jd_online_elim_count=0}else if(Q==="playing"&&n.round===1){window.__jd_online_elim_count=0}';
+      if (code.includes(oldOnlineRoundReset)) code = code.replace(oldOnlineRoundReset, newOnlineRoundReset);
+
+      // 14c) Offline — silence per-elimination sw beep (was firing on every render after first kill).
+      const oldOfflineSfx =
+        'f.current=I,tw(G);const se=n.players.filter(ie=>ie.isEliminated).length;se>h.current&&(h.current=se,sw())';
+      const newOfflineSfx =
+        'f.current=I,tw(G);const se=n.players.filter(ie=>ie.isEliminated).length;h.current=se';
+      if (code.includes(oldOfflineSfx)) code = code.replace(oldOfflineSfx, newOfflineSfx);
+
+      const oldOfflineWin =
+        'if(W>m.current&&(m.current=W,Uj()),L==="round_end"||L==="game_end")';
+      const newOfflineWin =
+        'if(W>m.current&&(m.current=W),L==="round_end"||L==="game_end")';
+      if (code.includes(oldOfflineWin)) code = code.replace(oldOfflineWin, newOfflineWin);
+
+      const oldOfflineRoundFanfare =
+        'f.current!==I&&(f.current=I,nw())';
+      const newOfflineRoundFanfare =
+        'f.current!==I&&(f.current=I,L==="game_end"&&(function(){try{__jdWinnerSfx()}catch(e){}})())';
+      if (code.includes(oldOfflineRoundFanfare)) code = code.replace(oldOfflineRoundFanfare, newOfflineRoundFanfare);
+
+      // 14d) Silence noisy SFX bodies — keep tw(cardName), Jt(click), cr(confirm).
+      const oldHx = 'function hx(){try{const e=Vs(),n=e.currentTime+.01,i=Ne(e,.4,n,.12);ct(e,.07,n,i,5e3,1e3),Ce(e,"sine",500,n,n+.08,i,300)}catch{}}';
+      const newHx = 'function hx(){}';
+      if (code.includes(oldHx)) code = code.replace(oldHx, newHx);
+
+      const oldHj = 'function Hj(){try{const e=Vs(),n=e.currentTime+.02;for(let r=0;r<6;r++){const l=r*.055,c=Ne(e,.25+r*.04,n+l,.06);ct(e,.05,n+l,c,350),Ce(e,"sine",95,n+l,n+l+.04,c)}const i=Ne(e,.4,n+.42,.6);Ce(e,"square",220,n+.42,n+1.02,i),Ce(e,"square",165,n+.42,n+.9,i,165),Ce(e,"sine",330,n+.5,n+1,i)}catch{}}';
+      const newHj = 'function Hj(){}';
+      if (code.includes(oldHj)) code = code.replace(oldHj, newHj);
+
+      const oldUj = 'function Uj(){try{const e=Vs(),n=e.currentTime+.02,i=Ne(e,.35,n,.5);Ce(e,"sine",1760,n,n+.5,i,1400),Ce(e,"sine",2200,n+.04,n+.4,i,1760);const r=Ne(e,.3,n,.15);ct(e,.08,n,r,2e3,400)}catch{}}';
+      const newUj = 'function Uj(){}';
+      if (code.includes(oldUj)) code = code.replace(oldUj, newUj);
+
+      const oldSw = 'function sw(){try{const e=Vs(),n=e.currentTime+.02,i=Ne(e,.45,n,.7);Ce(e,"sawtooth",220,n,n+.7,i,55),ct(e,.3,n,i,400)}catch{}}';
+      const newSw = 'function sw(){}';
+      if (code.includes(oldSw)) code = code.replace(oldSw, newSw);
+
+      const oldNw = 'function nw(){try{const e=Vs(),n=e.currentTime+.02,i=[523,659,784,1047,1319],r=[.1,.1,.1,.15,.45];let l=n;i.forEach((c,f)=>{const h=Ne(e,.35,l,r[f]);Ce(e,"triangle",c,l,l+r[f],h),l+=r[f]+.02})}catch{}}';
+      const newNw = 'function nw(){} function __jdWinnerSfx(){try{const e=Vs(),n=e.currentTime+.04,notes=[523,659,784,1047,1319,1568,2093],dur=[.12,.12,.12,.14,.18,.22,.55];let t=n;notes.forEach((f,i)=>{const g=Ne(e,.32,t,dur[i]);Ce(e,"triangle",f,t,t+dur[i],g);const g2=Ne(e,.16,t,dur[i]);Ce(e,"sine",f*2,t,t+dur[i],g2);t+=dur[i]*.85});const fg=Ne(e,.5,t+.05,1.4);Ce(e,"sine",1047,t+.05,t+1.45,fg);const fg2=Ne(e,.35,t+.05,1.4);Ce(e,"sine",2093,t+.05,t+1.45,fg2);const fg3=Ne(e,.2,t+.05,1.4);Ce(e,"sine",3136,t+.05,t+1.45,fg3)}catch{}} window.__jdWinnerSfx=__jdWinnerSfx;';
+      if (code.includes(oldNw)) code = code.replace(oldNw, newNw);
+
+      // 15) Inject polished trophy glow + gentle float (works on top of animate-bounce).
+      (function injectTrophyCss(){
+        try {
+          const css = "@keyframes jdTrophyGlow { 0%,100% { filter: drop-shadow(0 0 18px rgba(255,215,0,0.55)) drop-shadow(0 0 36px rgba(255,180,0,0.35)); transform: translateY(0) rotate(-3deg); } 50% { filter: drop-shadow(0 0 32px rgba(255,235,120,0.95)) drop-shadow(0 0 60px rgba(255,180,0,0.65)); transform: translateY(-6px) rotate(3deg); } } .text-6xl.animate-bounce, .text-5xl.animate-bounce { animation: jdTrophyGlow 1.6s ease-in-out infinite !important; display: inline-block; }";
+          const s = document.createElement("style");
+          s.textContent = css;
+          document.head.appendChild(s);
+        } catch {}
+      })();
+
       const blobUrl = URL.createObjectURL(new Blob([code], { type: "text/javascript" }));
       try {
         await import(blobUrl);
@@ -638,7 +708,7 @@
         URL.revokeObjectURL(blobUrl);
       }
     </script>
-    <link rel="stylesheet" crossorigin href="./assets/index-CVHLiWwd.css?v=17">
+    <link rel="stylesheet" crossorigin href="./assets/index-CVHLiWwd.css?v=18">
   </head>
   <body>
     <div id="root"></div>
