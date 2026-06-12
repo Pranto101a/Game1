@@ -615,6 +615,15 @@
         code = code.replace("Math.min(1.6,1+a/(c*18))", "Math.min(2.4,1+a/(c*12))");
       } catch {}
 
+      // 13) FIX: Merchant (বণিক) card crashed because variable `o` was never declared
+      // in the play handler — strict-mode ReferenceError stopped the card from being playable.
+      // Inject `let o;` before the two draw assignments.
+      const oldMerchantPlay =
+        'if(r==="merchant"){let m=[...f.deck],p=[];m.length>0&&((o=jdDrawAfterReshuffle(m)),m=o.deck,p.push(o.card));m.length>0&&((o=jdDrawAfterReshuffle(m)),m=o.deck,p.push(o.card));';
+      const newMerchantPlay =
+        'if(r==="merchant"){let m=[...f.deck],p=[],o;m.length>0&&((o=jdDrawAfterReshuffle(m)),m=o.deck,p.push(o.card));m.length>0&&((o=jdDrawAfterReshuffle(m)),m=o.deck,p.push(o.card));';
+      if (code.includes(oldMerchantPlay)) code = code.replace(oldMerchantPlay, newMerchantPlay);
+
       // 12) Smarter AI play choice: avoid suicidal swordsman when remaining card is weak
       const oldAiTakeTurn =
         'function o3(e){const i=e.players[e.currentPlayerIndex].hand;if(Wd(i))return Ji(e,i.indexOf(\"captain\"));for(const l of a3){const c=i.indexOf(l);if(c!==-1)if(r3.includes(l)){if(gc(e,l).length>0||l===\"cannon\")return Ji(e,c)}else return Ji(e,c)}const r=i.reduce((l,c,f)=>{if(c===\"pirate\")return l;const h=Rt[c];return h<l.val?{idx:f,val:h}:l},{idx:0,val:1/0});return Ji(e,r.val===1/0?0:r.idx)}';
